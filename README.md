@@ -1,286 +1,286 @@
-# WorkSphere - Project Management Platform
+---
+<h1 align="center">🚀 WorkSphere</h1>
 
-A powerful, full-stack project management platform built with Next.js, MongoDB, and modern web technologies. WorkSphere provides teams with comprehensive tools for project management, task tracking, team collaboration, and secure communication.
+<p align="center">
+A modern, secure, and scalable project management platform built with <strong>Next.js 14</strong>, <strong>TypeScript</strong>, and <strong>MongoDB</strong>.
+</p>
 
-## 🚀 Features
+<p align="center">
+<a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-14-000000?logo=next.js" /></a>
+<a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-4.9.5-3178C6?logo=typescript" /></a>
+<a href="https://www.mongodb.com/"><img src="https://img.shields.io/badge/MongoDB-6.0-47A248?logo=mongodb" /></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" /></a>
+<a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" /></a>
+</p>
+---
 
-### Core Features
-- **User Authentication & Authorization**
-  - JWT-based authentication
-  - Multi-factor authentication (MFA)
-  - Email verification
-  - Password reset functionality
-  - Role-based access control
+## 📌 Overview
 
-- **Workspace Management**
-  - Create and manage multiple workspaces
-  - Invite team members with different roles
-  - Workspace settings and permissions
-  - Member management
+WorkSphere streamlines team collaboration, task management, and communication in a single unified platform. Empower your teams with real-time chat, role-based access, and advanced project-tracking tools.
 
-- **Project Management**
-  - Create and organize projects within workspaces
-  - Project status tracking
-  - Member assignment
-  - Project analytics and reporting
+---
 
-- **Task Management**
-  - Create, assign, and track tasks
-  - Multiple task statuses and priorities
-  - Due date management
-  - Task comments and attachments
-  - Activity tracking
+## 📑 Table of Contents
 
-- **Team Collaboration**
-  - Real-time chat with end-to-end encryption
-  - File sharing and attachments
-  - @mentions and notifications
-  - Team activity feeds
+- [✨ Features](#-features)
+- [🛠 Tech Stack](#-tech-stack)
+- [📁 Project Structure](#-project-structure)
+- [⚙️ Setup](#-setup)
+- [📧 Email Configuration](#-email-configuration)
+- [🔐 Security Features](#-security-features)
+- [🧪 Testing](#-testing)
+- [🚀 Deployment](#-deployment)
+- [📚 API Documentation](#-api-documentation)
+- [🤝 Contributing](#-contributing)
+- [💬 Support](#-support)
+- [📄 License](#-license)
+- [🙏 Acknowledgments](#-acknowledgments)
 
-- **Security Features**
-  - End-to-end encryption for chat messages
-  - Secure file uploads
-  - Rate limiting
-  - CORS protection
-  - Input validation and sanitization
+---
+
+## ✨ Features
+
+### 🔐 Authentication & Authorization
+
+- JWT-based sessions
+- Multi-factor authentication (MFA)
+- Email verification & password resets
+- Role-based access control
+
+### 🏢 Workspace Management
+
+- Create & manage multiple workspaces
+- Role-based team invitations & permissions
+
+### 📦 Project Management
+
+- Track project status & member assignment
+- View analytics & reporting
+
+### ✅ Task Management
+
+- Assign tasks with priorities, deadlines, comments, attachments
+- Track activity history
+
+### 💬 Team Collaboration
+
+- Real-time encrypted chat
+- @mentions, file sharing, team feeds
+
+### 🛡️ Security
+
+- End-to-end encryption (AES-256-GCM + Diffie-Hellman)
+- Rate limiting, CORS protection, input sanitization
+
+---
 
 ## 🛠 Tech Stack
 
-### Backend
-- **Framework**: Next.js 14 (App Router)
-- **Database**: MongoDB with Mongoose ODM
-- **Authentication**: NextAuth.js with JWT
-- **Email**: Brevo (Sendinblue) SMTP
-- **Encryption**: Node.js Crypto API
-- **Validation**: Zod
-- **File Upload**: Vercel Blob (planned)
+- **Frontend**: Next.js 14 (App Router), React 18, Tailwind CSS, shadcn/ui
+- **Backend**: Next.js API Routes, MongoDB, NextAuth.js
+- **Utilities**: TypeScript, ESLint, Prettier
+- **Testing**: Jest, React Testing Library
 
-### Frontend
-- **Framework**: Next.js 14 with React 18
-- **Styling**: Tailwind CSS
-- **UI Components**: shadcn/ui + Radix UI
-- **Animations**: Framer Motion
-- **State Management**: React Context + Hooks
-- **Forms**: React Hook Form + Zod
-
-### Development
-- **Language**: TypeScript
-- **Linting**: ESLint
-- **Code Formatting**: Prettier
-- **Testing**: Jest + React Testing Library (planned)
+---
 
 ## 📁 Project Structure
 
-\`\`\`
+```
 worksphere/
+├── app/                 # Next.js App Router directory
+│   ├── api/             # API route handlers
+│   ├── (auth)/          # Authentication routes
+│   ├── dashboard/       # Dashboard UI pages
+├── components/
+│   ├── ui/              # shadcn/ui components
+│   └── custom/          # Custom components
 ├── src/
-│   ├── config/           # Configuration files
-│   │   ├── database.ts
-│   │   ├── email.ts
-│   │   ├── auth.ts
-│   │   └── app.ts
-│   ├── controllers/      # API controllers
-│   │   ├── auth.controller.ts
-│   │   ├── workspace.controller.ts
-│   │   └── project.controller.ts
-│   ├── services/         # Business logic services
-│   │   ├── auth.service.ts
-│   │   ├── email.service.ts
-│   │   └── workspace.service.ts
-│   ├── models/           # Database models
-│   │   ├── user.ts
-│   │   ├── workspace.ts
-│   │   ├── project.ts
-│   │   ├── task.ts
-│   │   └── chat.ts
-│   ├── middleware/       # Custom middleware
-│   │   ├── auth.middleware.ts
-│   │   └── validation.middleware.ts
-│   ├── types/            # TypeScript type definitions
-│   │   ├── auth.types.ts
-│   │   ├── workspace.types.ts
-│   │   └── api.types.ts
-│   ├── enums/            # Enumerations
-│   │   ├── user.enum.ts
-│   │   ├── task.enum.ts
-│   │   └── notification.enum.ts
-│   ├── utils/            # Utility functions
-│   │   ├── crypto.utils.ts
-│   │   ├── date.utils.ts
-│   │   └── string.utils.ts
-│   └── errors/           # Error handling
-│       ├── AppError.ts
-│       └── errorHandler.ts
-├── app/                  # Next.js app directory
-│   ├── api/              # API routes
-│   ├── (auth)/           # Authentication pages
-│   ├── dashboard/        # Dashboard pages
-│   └── globals.css
-├── components/           # React components
-│   ├── ui/               # shadcn/ui components
-│   └── custom/           # Custom components
-└── lib/                  # Shared utilities
-\`\`\`
+│   ├── config/          # App & service configs
+│   ├── controllers/     # API logic
+│   ├── services/        # Business logic
+│   ├── models/          # Mongoose models
+│   ├── middleware/      # Custom middleware
+│   ├── types/           # TypeScript definitions
+│   ├── enums/           # Enumerated values
+│   ├── utils/           # Helper functions
+│   └── errors/          # Error handling
+└── lib/                 # Shared library functions
+```
 
-## 🚀 Getting Started
+---
+
+## ⚙️ Setup
 
 ### Prerequisites
-- Node.js 18+ 
-- MongoDB database
-- Brevo (Sendinblue) account for email services
+
+- Node.js 18+
+- MongoDB instance
+- Brevo (Sendinblue) account for emails
 
 ### Installation
 
-1. **Clone the repository**
-   \`\`\`bash
-   git clone https://github.com/your-username/worksphere.git
-   cd worksphere
-   \`\`\`
+```bash
+git clone https://github.com/your-username/worksphere.git
+cd worksphere
+npm install
+cp .env.example .env.local
+```
 
-2. **Install dependencies**
-   \`\`\`bash
-   npm install
-   \`\`\`
+Fill in `.env.local` with:
 
-3. **Set up environment variables**
-   \`\`\`bash
-   cp .env.example .env.local
-   \`\`\`
-   
-   Fill in your environment variables:
-   \`\`\`env
-   # Database
-   MONGODB_URI=mongodb://localhost:27017/worksphere
-   
-   # Authentication
-   NEXTAUTH_SECRET=your-nextauth-secret-key-here
-   NEXTAUTH_URL=http://localhost:3000
-   
-   # Email Configuration (Brevo)
-   BREVO_SMTP_HOST=smtp-relay.brevo.com
-   BREVO_SMTP_PORT=587
-   BREVO_SMTP_USER=your-brevo-smtp-user
-   BREVO_SMTP_PASSWORD=your-brevo-smtp-password
-   EMAIL_FROM=noreply@worksphere.com
-   
-   # Application
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
-   \`\`\`
+```env
+MONGODB_URI=mongodb://localhost:27017/worksphere
+NEXTAUTH_SECRET=your-secret
+NEXTAUTH_URL=http://localhost:3000
 
-4. **Start the development server**
-   \`\`\`bash
-   npm run dev
-   \`\`\`
+# Brevo Email
+BREVO_SMTP_HOST=smtp-relay.brevo.com
+BREVO_SMTP_PORT=587
+BREVO_SMTP_USER=your-user
+BREVO_SMTP_PASSWORD=your-password
+EMAIL_FROM=noreply@worksphere.com
 
-5. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+Start development server:
+
+```bash
+npm run dev
+```
+
+Visit: [http://localhost:3000](http://localhost:3000)
+
+---
 
 ## 📧 Email Configuration
 
-WorkSphere uses Brevo (formerly Sendinblue) for email services. To set up email functionality:
+1. Register at [Brevo](https://brevo.com)
+2. Generate SMTP credentials
+3. Update `.env.local` accordingly
+4. Set up sender domain/email
 
-1. Create a Brevo account at [brevo.com](https://brevo.com)
-2. Generate SMTP credentials in your Brevo dashboard
-3. Add the credentials to your `.env.local` file
-4. Configure your sender email address
+---
 
 ## 🔐 Security Features
 
-### Authentication
-- JWT-based session management
-- Multi-factor authentication support
-- Secure password hashing with bcrypt
-- Email verification for new accounts
+- **Authentication**: MFA, bcrypt, email verification
+- **Encryption**: AES-256-GCM chat, secure file sharing
+- **Protection**: Rate limiting, CORS, input validation
 
-### Data Protection
-- End-to-end encryption for chat messages using AES-256-GCM
-- Diffie-Hellman key exchange for secure communication
-- Input validation and sanitization
-- CORS protection
-
-### Rate Limiting
-- API rate limiting to prevent abuse
-- Configurable limits per endpoint
-- IP-based tracking
+---
 
 ## 🧪 Testing
 
-\`\`\`bash
-# Run tests
+```bash
+# Run all tests
 npm test
 
-# Run tests in watch mode
+# Watch mode
 npm run test:watch
 
-# Generate coverage report
+# Code coverage
 npm run test:coverage
-\`\`\`
+```
+
+---
 
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
-1. Push your code to GitHub
-2. Connect your repository to Vercel
-3. Configure environment variables in Vercel dashboard
-4. Deploy automatically on push
+
+1. Push to GitHub
+2. Connect to [Vercel](https://vercel.com/)
+3. Configure environment variables
+4. Deploy
 
 ### Manual Deployment
-\`\`\`bash
-# Build the application
+
+```bash
 npm run build
-
-# Start production server
 npm start
-\`\`\`
-
-## 📝 API Documentation
-
-### Authentication Endpoints
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - User login
-- `POST /api/auth/verify-email` - Verify email address
-- `POST /api/auth/forgot-password` - Request password reset
-- `POST /api/auth/reset-password` - Reset password
-- `POST /api/auth/mfa/enable` - Enable MFA
-- `POST /api/auth/mfa/verify` - Verify MFA code
-- `POST /api/auth/mfa/disable` - Disable MFA
-
-### Workspace Endpoints
-- `GET /api/workspaces` - Get user workspaces
-- `POST /api/workspaces` - Create workspace
-- `GET /api/workspaces/[id]` - Get workspace details
-- `PUT /api/workspaces/[id]` - Update workspace
-- `DELETE /api/workspaces/[id]` - Delete workspace
-- `POST /api/workspaces/[id]/members` - Invite member
-- `GET /api/workspaces/[id]/members` - Get workspace members
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Next.js](https://nextjs.org/) for the amazing React framework
-- [shadcn/ui](https://ui.shadcn.com/) for beautiful UI components
-- [Tailwind CSS](https://tailwindcss.com/) for utility-first CSS
-- [MongoDB](https://mongodb.com/) for the database
-- [Brevo](https://brevo.com/) for email services
-
-## 📞 Support
-
-If you have any questions or need help, please:
-- Open an issue on GitHub
-- Contact us at support@worksphere.com
-- Check our documentation at [docs.worksphere.com](https://docs.worksphere.com)
+```
 
 ---
 
-**WorkSphere** - Empowering teams to work better together 🚀
+## 📚 API Documentation
+
+### 🔐 Auth
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/verify-email`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `POST /api/auth/mfa/enable`
+- `POST /api/auth/mfa/verify`
+- `POST /api/auth/mfa/disable`
+
+### 🏢 Workspaces
+
+- `GET /api/workspaces`
+- `POST /api/workspaces`
+- `GET /api/workspaces/:id`
+- `PUT /api/workspaces/:id`
+- `DELETE /api/workspaces/:id`
+- `POST /api/workspaces/:id/members`
+- `GET /api/workspaces/:id/members`
+
+---
+
+## 🤝 Contributing
+
+We welcome your contributions!
+
+```bash
+# Fork and clone
+git checkout -b feature/your-feature
+git commit -m "Add: Your feature"
+git push origin feature/your-feature
+```
+
+Please ensure:
+
+- Code follows conventions
+- Add tests where needed
+- Update docs
+- Tests pass
+
+---
+
+## 💬 Support
+
+- 📚 [Documentation](https://docs.worksphere.com)
+- 🐛 [GitHub Issues](https://github.com/your-username/worksphere/issues)
+- 📧 Email: [support@worksphere.com](mailto:support@worksphere.com)
+- 💬 [Join Discord](https://discord.gg/worksphere)
+
+---
+
+## 📄 License
+
+MIT License. See [`LICENSE`](LICENSE) for full details.
+
+---
+
+## 🙏 Acknowledgments
+
+- [Next.js](https://nextjs.org/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [shadcn/ui](https://ui.shadcn.com/)
+- [MongoDB](https://mongodb.com/)
+- [Brevo](https://brevo.com/)
+
+---
+
+<p align="center"><strong>WorkSphere</strong> — Empowering teams to work better together.</p>
+<p align="center">
+  <a href="https://twitter.com/worksphere">
+    <img src="https://img.shields.io/twitter/follow/worksphere?style=social" />
+  </a>
+  <a href="https://discord.gg/worksphere">
+    <img src="https://img.shields.io/discord/1234567890?label=discord&logo=discord&logoColor=white" />
+  </a>
+</p>
+
+---
