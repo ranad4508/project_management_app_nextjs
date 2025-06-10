@@ -179,8 +179,8 @@ export default function SettingsPage() {
       const result = await enableMFA().unwrap();
       setMfaSetup({
         isOpen: true,
-        secret: result.data.secret,
-        qrCode: result.data.qrCode,
+        secret: result.secret,
+        qrCode: result.qrCode,
         verificationCode: "",
       });
       toast.success(

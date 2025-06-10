@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,65 +32,38 @@ import {
   Calendar,
   Settings,
   Loader2,
+  MoreHorizontal,
 } from "lucide-react";
-
-interface Workspace {
-  _id: string;
-  name: string;
-  description: string;
-  owner: {
-    _id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-  members: Array<{
-    user: {
-      _id: string;
-      name: string;
-      email: string;
-      avatar?: string;
-    };
-    role: string;
-    joinedAt: string;
-  }>;
-  projectsCount: number;
-  tasksCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
+import Link from "next/link";
+import {
+  useGetWorkspacesQuery,
+  useCreateWorkspaceMutation,
+  type CreateWorkspaceData,
+} from "@/src/store/api/workspaceApi";
 
 export default function WorkspacesPage() {
   const { data: session } = useSession();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newWorkspace, setNewWorkspace] = useState({
+  const [newWorkspace, setNewWorkspace] = useState<CreateWorkspaceData>({
     name: "",
     description: "",
   });
 
-  useEffect(() => {
-    fetchWorkspaces();
-  }, []);
+  // Redux queries and mutations
+  const {
+    data: workspacesData,
+    isLoading,
+    error,
+    refetch,
+  } = useGetWorkspacesQuery({
+    page: 1,
+    limit: 20,
+    sortBy: "updatedAt",
+    sortOrder: "desc",
+  });
 
-  const fetchWorkspaces = async () => {
-    try {
-      const response = await fetch("/api/workspaces");
-      if (response.ok) {
-        const data = await response.json();
-        setWorkspaces(data.data || []);
-      } else {
-        toast.error("Failed to load workspaces");
-      }
-    } catch (error) {
-      console.error("Error fetching workspaces:", error);
-      toast.error("Failed to load workspaces");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [createWorkspace, { isLoading: isCreating }] =
+    useCreateWorkspaceMutation();
 
   const handleCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,38 +73,21 @@ export default function WorkspacesPage() {
       return;
     }
 
-    setIsCreating(true);
     try {
-      const response = await fetch("/api/workspaces", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newWorkspace),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setWorkspaces((prev) => [data.data, ...prev]);
-        setNewWorkspace({ name: "", description: "" });
-        setCreateDialogOpen(false);
-        toast.success("Workspace created successfully");
-      } else {
-        const error = await response.json();
-        toast.error(error.error || "Failed to create workspace");
-      }
-    } catch (error) {
+      await createWorkspace(newWorkspace).unwrap();
+      setNewWorkspace({ name: "", description: "" });
+      setCreateDialogOpen(false);
+      toast.success("Workspace created successfully");
+    } catch (error: any) {
       console.error("Error creating workspace:", error);
-      toast.error("Failed to create workspace");
-    } finally {
-      setIsCreating(false);
+      toast.error(error?.data?.error || "Failed to create workspace");
     }
   };
 
-  const getUserRole = (workspace: Workspace) => {
+  const getUserRole = (workspace: any) => {
     if (workspace.owner._id === session?.user?.id) return "Owner";
     const member = workspace.members.find(
-      (m) => m.user._id === session?.user?.id
+      (m: any) => m.user._id === session?.user?.id
     );
     return member?.role || "Member";
   };
@@ -143,6 +99,22 @@ export default function WorkspacesPage() {
       </div>
     );
   }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <h3 className="text-lg font-medium mb-2">Error loading workspaces</h3>
+          <p className="text-muted-foreground mb-4">
+            Failed to load your workspaces. Please try again.
+          </p>
+          <Button onClick={() => refetch()}>Retry</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const workspaces = workspacesData?.workspaces || [];
 
   return (
     <div className="space-y-6">
@@ -245,12 +217,19 @@ export default function WorkspacesPage() {
           {workspaces.map((workspace) => (
             <Card
               key={workspace._id}
-              className="hover:shadow-md transition-shadow cursor-pointer"
+              className="hover:shadow-md transition-shadow"
             >
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <CardTitle className="text-lg">{workspace.name}</CardTitle>
+                    <CardTitle className="text-lg">
+                      <Link
+                        href={`/dashboard/workspaces/${workspace._id}`}
+                        className="hover:text-blue-600 transition-colors"
+                      >
+                        {workspace.name}
+                      </Link>
+                    </CardTitle>
                     <Badge
                       variant={
                         getUserRole(workspace) === "Owner"
@@ -262,7 +241,7 @@ export default function WorkspacesPage() {
                     </Badge>
                   </div>
                   <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4" />
+                    <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </div>
                 {workspace.description && (
@@ -275,11 +254,11 @@ export default function WorkspacesPage() {
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <FolderOpen className="h-4 w-4 text-muted-foreground" />
-                    <span>{workspace.projectsCount} projects</span>
+                    <span>{workspace.stats.totalProjects} projects</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{workspace.tasksCount} tasks</span>
+                    <span>{workspace.stats.totalTasks} tasks</span>
                   </div>
                 </div>
 
@@ -318,6 +297,19 @@ export default function WorkspacesPage() {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Completion Rate</span>
+                    <span>{workspace.stats.completionRate}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${workspace.stats.completionRate}%` }}
+                    />
+                  </div>
+                </div>
+
                 <div className="pt-2 border-t">
                   <p className="text-xs text-muted-foreground">
                     Created {new Date(workspace.createdAt).toLocaleDateString()}
@@ -326,11 +318,19 @@ export default function WorkspacesPage() {
 
                 <div className="flex gap-2">
                   <Button asChild className="flex-1">
-                    <a href={`/workspaces/${workspace._id}`}>Open</a>
+                    <Link href={`/dashboard/workspaces/${workspace._id}`}>
+                      Open
+                    </Link>
                   </Button>
-                  <Button asChild variant="outline" className="flex-1">
-                    <a href={`/workspaces/${workspace._id}/chat`}>Chat</a>
-                  </Button>
+                  {getUserRole(workspace) === "Owner" && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link
+                        href={`/dashboard/workspaces/${workspace._id}/settings`}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -1,34 +1,34 @@
-import mongoose, { Schema, type Document } from "mongoose"
-import { MemberRole } from "@/src/enums/user.enum"
-import { WorkspaceStatus } from "@/src/enums/workspace.enum"
+import mongoose, { Schema, type Document } from "mongoose";
+import { MemberRole } from "@/src/enums/user.enum";
+import { WorkspaceStatus } from "@/src/enums/workspace.enum";
 
 export interface IWorkspaceMember {
-  user: mongoose.Types.ObjectId
-  role: MemberRole
-  joinedAt: Date
-  permissions: string[]
+  user: mongoose.Types.ObjectId;
+  role: MemberRole;
+  joinedAt: Date;
+  permissions: string[];
 }
 
 export interface IWorkspace extends Document {
-  name: string
-  description?: string
-  slug: string
-  owner: mongoose.Types.ObjectId
-  members: IWorkspaceMember[]
-  status: WorkspaceStatus
+  name: string;
+  description?: string;
+  slug: string;
+  owner: mongoose.Types.ObjectId;
+  members: IWorkspaceMember[];
+  status: WorkspaceStatus;
   settings: {
-    allowGuestAccess: boolean
-    requireApprovalForTasks: boolean
-    defaultTaskStatus: string
-    timeZone: string
+    allowGuestAccess: boolean;
+    requireApprovalForTasks: boolean;
+    defaultTaskStatus: string;
+    timeZone: string;
     workingHours: {
-      start: string
-      end: string
-      days: number[]
-    }
-  }
-  createdAt: Date
-  updatedAt: Date
+      start: string;
+      end: string;
+      days: number[];
+    };
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const WorkspaceSchema: Schema = new Schema(
@@ -108,43 +108,49 @@ const WorkspaceSchema: Schema = new Schema(
           type: String,
           default: "17:00",
         },
-        days: [
-          {
-            type: Number,
-            min: 0,
-            max: 6,
+        days: {
+          type: [Number],
+          default: [1, 2, 3, 4, 5], // Monday to Friday
+          validate: {
+            validator: function (days: number[]) {
+              return days.every((day) => day >= 0 && day <= 6);
+            },
+            message: "Days must be between 0 (Sunday) and 6 (Saturday)",
           },
-        ],
-        default: {
-          start: "09:00",
-          end: "17:00",
-          days: [1, 2, 3, 4, 5], // Monday to Friday
         },
       },
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 // Indexes
-WorkspaceSchema.index({ slug: 1 })
-WorkspaceSchema.index({ owner: 1 })
-WorkspaceSchema.index({ "members.user": 1 })
-WorkspaceSchema.index({ status: 1 })
+WorkspaceSchema.index({ slug: 1 });
+WorkspaceSchema.index({ owner: 1 });
+WorkspaceSchema.index({ "members.user": 1 });
+WorkspaceSchema.index({ status: 1 });
 
 // Methods
 WorkspaceSchema.methods.isMember = function (userId: string): boolean {
-  return this.members.some((member: IWorkspaceMember) => member.user.toString() === userId)
-}
+  return this.members.some(
+    (member: IWorkspaceMember) => member.user.toString() === userId
+  );
+};
 
-WorkspaceSchema.methods.getMemberRole = function (userId: string): MemberRole | null {
-  const member = this.members.find((member: IWorkspaceMember) => member.user.toString() === userId)
-  return member ? member.role : null
-}
+WorkspaceSchema.methods.getMemberRole = function (
+  userId: string
+): MemberRole | null {
+  const member = this.members.find(
+    (member: IWorkspaceMember) => member.user.toString() === userId
+  );
+  return member ? member.role : null;
+};
 
 WorkspaceSchema.methods.isAdmin = function (userId: string): boolean {
-  const role = this.getMemberRole(userId)
-  return role === MemberRole.ADMIN || this.owner.toString() === userId
-}
+  const role = this.getMemberRole(userId);
+  return role === MemberRole.ADMIN || this.owner.toString() === userId;
+};
 
-export const Workspace = mongoose.models.Workspace || mongoose.model<IWorkspace>("Workspace", WorkspaceSchema)
+export const Workspace =
+  mongoose.models.Workspace ||
+  mongoose.model<IWorkspace>("Workspace", WorkspaceSchema);

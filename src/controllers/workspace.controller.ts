@@ -135,7 +135,7 @@ export class WorkspaceController {
       const result = await this.workspaceService.inviteMember(
         id,
         user.id,
-        validatedData
+        validatedData as any
       );
 
       return NextResponse.json({
@@ -231,6 +231,49 @@ export class WorkspaceController {
         success: true,
         data: result,
         message: result.message || "Invitation details retrieved",
+      });
+    }
+  );
+
+  getWorkspaceSettings = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: { id: string } }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = params;
+
+      const result = await this.workspaceService.getWorkspaceSettings(
+        id,
+        user.id
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+      });
+    }
+  );
+
+  updateWorkspaceSettings = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: { id: string } }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = params;
+      const body = await req.json();
+
+      const result = await this.workspaceService.updateWorkspaceSettings(
+        id,
+        user.id,
+        body
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+        message: result.message,
       });
     }
   );

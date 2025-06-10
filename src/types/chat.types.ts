@@ -111,6 +111,61 @@ export interface DecryptedMessagePreview {
   updatedAt: Date;
 }
 
+export interface ChatRoom {
+  _id: string;
+  name: string;
+  description?: string;
+  type: ChatRoomType;
+  workspace: string;
+  participants: Array<{
+    user: {
+      _id: string;
+      name: string;
+      email: string;
+      avatar?: string;
+    };
+    role: string;
+    joinedAt: Date;
+  }>;
+  isPrivate: boolean;
+  lastMessage?: DecryptedMessage;
+  unreadCount: number;
+  createdBy: {
+    _id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChatRoomResponse extends ChatRoom {}
+
+export interface ChatRoomsResponse {
+  rooms: ChatRoom[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
+
+export interface MessagesResponse {
+  messages: DecryptedMessage[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
+
 export interface SocketMessagePayload {
   roomId: string;
   message: {
