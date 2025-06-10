@@ -103,7 +103,7 @@ export class ChatController {
 
       return NextResponse.json({
         success: true,
-        data: chatRooms,
+        data: { rooms: chatRooms },
       });
     }
   );
@@ -460,7 +460,28 @@ export class ChatController {
 
       return NextResponse.json({
         success: true,
-        data: chatRooms,
+        data: { rooms: chatRooms },
+      });
+    }
+  );
+
+  ensureWorkspaceGeneralRoom = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: { workspaceId: string } }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { workspaceId } = params;
+
+      const chatRoom = await this.chatService.ensureWorkspaceGeneralRoom(
+        workspaceId,
+        user.id
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: chatRoom,
+        message: "General room ensured successfully",
       });
     }
   );

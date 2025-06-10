@@ -1,9 +1,9 @@
-import { ChatController } from "@/src/controllers/chat.controller"
-import Database from "@/src/config/database"
+import type { NextRequest } from "next/server";
+import { ChatController } from "@/src/controllers/chat.controller";
+import { asyncHandler } from "@/src/errors/errorHandler";
 
-const chatController = new ChatController()
+const chatController = new ChatController();
 
-export async function POST(req: Request) {
-  await Database.connect()
-  return chatController.initializeUserEncryption(req as any)
-}
+export const POST = asyncHandler(async (req: NextRequest) => {
+  return chatController.initializeUserEncryption(req);
+});

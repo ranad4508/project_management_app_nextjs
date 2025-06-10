@@ -10,6 +10,13 @@ const handle = app.getRequestHandler();
 app.prepare().then(() => {
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
+
+    // Handle Socket.io requests
+    if (parsedUrl.pathname.startsWith("/api/socketio")) {
+      // Let Socket.io handle this request
+      return;
+    }
+
     handle(req, res, parsedUrl);
   });
 
@@ -19,5 +26,6 @@ app.prepare().then(() => {
   server.listen(process.env.PORT || 3000, (err) => {
     if (err) throw err;
     console.log(`> Ready on http://localhost:${process.env.PORT || 3000}`);
+    console.log(`> Socket.io server running on /api/socketio`);
   });
 });

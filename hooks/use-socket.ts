@@ -21,7 +21,12 @@ export function useSocket() {
     const socket = io(
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
       {
+        path: "/api/socketio",
         withCredentials: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        autoConnect: true,
+        transports: ["websocket", "polling"],
       }
     );
 
@@ -123,7 +128,7 @@ export function useSocket() {
   const joinRoom = useCallback(
     (roomId: string) => {
       if (socketRef.current && isConnected) {
-        socketRef.current.emit("room:join", { roomId });
+        socketRef.current.emit("room:join", roomId);
       }
     },
     [isConnected]
@@ -133,7 +138,7 @@ export function useSocket() {
   const leaveRoom = useCallback(
     (roomId: string) => {
       if (socketRef.current && isConnected) {
-        socketRef.current.emit("room:leave", { roomId });
+        socketRef.current.emit("room:leave", roomId);
       }
     },
     [isConnected]

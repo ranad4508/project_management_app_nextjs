@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { type Document, Schema } from "mongoose";
 import { UserRole } from "@/src/enums/user.enum";
 
 export interface IUser extends Document {
@@ -44,6 +44,7 @@ const userSchema = new Schema<IUser>(
       unique: true,
       lowercase: true,
       trim: true,
+      // Remove index: true since we're using schema.index() below
     },
     password: {
       type: String,
@@ -110,7 +111,8 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-userSchema.index({ email: 1 });
+// Only create indexes once using schema.index()
+userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ verificationToken: 1 });
 userSchema.index({ resetPasswordToken: 1 });
 

@@ -1,5 +1,4 @@
 import { configureStore } from "@reduxjs/toolkit";
-import { setupListeners } from "@reduxjs/toolkit/query";
 import { authApi } from "./api/authApi";
 import { userApi } from "./api/userApi";
 import { workspaceApi } from "./api/workspaceApi";
@@ -7,19 +6,21 @@ import { projectApi } from "./api/projectApi";
 import { chatApi } from "./api/chatApi";
 import authSlice from "./slices/authSlice";
 import userSlice from "./slices/userSlice";
+import chatSlice from "./slices/chatSlice";
 
 export const store = configureStore({
   reducer: {
-    // RTK Query APIs
+    // Slices
+    auth: authSlice,
+    user: userSlice,
+    chat: chatSlice,
+
+    // API slices
     [authApi.reducerPath]: authApi.reducer,
     [userApi.reducerPath]: userApi.reducer,
     [workspaceApi.reducerPath]: workspaceApi.reducer,
     [projectApi.reducerPath]: projectApi.reducer,
     [chatApi.reducerPath]: chatApi.reducer,
-
-    // Regular slices
-    auth: authSlice,
-    user: userSlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -27,6 +28,8 @@ export const store = configureStore({
         ignoredActions: [
           "persist/PERSIST",
           "persist/REHYDRATE",
+          "persist/PAUSE",
+          "persist/PURGE",
           "persist/REGISTER",
         ],
       },
@@ -38,8 +41,6 @@ export const store = configureStore({
       chatApi.middleware
     ),
 });
-
-setupListeners(store.dispatch);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

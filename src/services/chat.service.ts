@@ -30,7 +30,7 @@ export class ChatService {
   }
 
   /**
-   * Create a new chat room
+   * Create a new chat room with encryption
    */
   async createChatRoom(userId: string, data: CreateChatRoomData) {
     const {
@@ -43,21 +43,43 @@ export class ChatService {
     } = data;
 
     // Verify workspace access
-    const workspace = await Workspace.findById(workspaceId);
-    if (!workspace || !workspace.isMember(userId)) {
+    const workspace = await Workspace.findById(workspaceId).populate(
+      "members.user"
+    );
+    if (!workspace) {
+      throw new NotFoundError("Workspace not found");
+    }
+
+    // Check if user is workspace member
+    const isWorkspaceMember = workspace.members.some(
+      (member: any) => member.user._id.toString() === userId
+    );
+    if (!isWorkspaceMember) {
       throw new AuthorizationError("Access denied to workspace");
     }
 
-    // Validate participants are workspace members
-    const validParticipants = participants.filter((participantId) =>
-      workspace.isMember(participantId)
+    // Get all workspace member IDs for validation
+    const workspaceMemberIds = workspace.members.map((member: any) =>
+      member.user._id.toString()
     );
-    if (validParticipants.length !== participants.length) {
-      throw new ValidationError("Some participants are not workspace members");
-    }
 
-    // Ensure creator is included in participants
-    const allParticipants = [...new Set([userId, ...validParticipants])];
+    // For workspace type rooms, include all workspace members
+    let allParticipants: string[];
+    if (type === "workspace") {
+      allParticipants = workspaceMemberIds;
+    } else {
+      // Validate participants are workspace members
+      const validParticipants = participants.filter((participantId) =>
+        workspaceMemberIds.includes(participantId)
+      );
+      if (validParticipants.length !== participants.length) {
+        throw new ValidationError(
+          "Some participants are not workspace members"
+        );
+      }
+      // Ensure creator is included in participants
+      allParticipants = [...new Set([userId, ...validParticipants])];
+    }
 
     // For direct messages, ensure only 2 participants
     if (type === "direct" && allParticipants.length !== 2) {
@@ -75,6 +97,8 @@ export class ChatService {
       });
 
       if (existingRoom) {
+        await existingRoom.populate("participants", "name email avatar");
+        await existingRoom.populate("createdBy", "name email avatar");
         return existingRoom;
       }
     }
@@ -112,8 +136,17 @@ export class ChatService {
    */
   async getWorkspaceChatRooms(workspaceId: string, userId: string) {
     // Verify workspace access
-    const workspace = await Workspace.findById(workspaceId);
-    if (!workspace || !workspace.isMember(userId)) {
+    const workspace = await Workspace.findById(workspaceId).populate(
+      "members.user"
+    );
+    if (!workspace) {
+      throw new NotFoundError("Workspace not found");
+    }
+
+    const isWorkspaceMember = workspace.members.some(
+      (member: any) => member.user._id.toString() === userId
+    );
+    if (!isWorkspaceMember) {
       throw new AuthorizationError("Access denied to workspace");
     }
 
@@ -268,7 +301,7 @@ export class ChatService {
   }
 
   /**
-   * Send message to chat room
+   * Send encrypted message to chat room
    */
   async sendMessage(userId: string, password: string, data: SendMessageData) {
     const {
@@ -287,7 +320,7 @@ export class ChatService {
     }
 
     // Encrypt message content
-    const { encryptedContent, encryptionData } =
+    const { content: encryptedContent, encryptionData } =
       await this.encryptionService.encryptMessage(
         content,
         roomId,
@@ -349,21 +382,14 @@ export class ChatService {
       );
     }
 
-    // Emit socket event for real-time updates
+    // Emit socket event for real-time updates (encrypted)
     try {
-      const decryptedContent = await this.encryptionService.decryptMessage(
-        encryptedContent,
-        encryptionData,
-        roomId,
-        userId,
-        password
-      );
-
       const socketPayload = {
         roomId,
         message: {
           id: message._id.toString(),
-          content: decryptedContent,
+          content: encryptedContent, // Send encrypted content
+          encryptionData,
           sender: {
             id: message.sender._id.toString(),
             name: message.sender.name,
@@ -397,41 +423,8 @@ export class ChatService {
     return message;
   }
 
-  private async getReplyToData(
-    replyToId: any
-  ): Promise<DecryptedMessagePreview | null> {
-    try {
-      const replyMessage = await ChatMessage.findById(replyToId).populate(
-        "sender",
-        "name email avatar"
-      );
-
-      if (!replyMessage) return null;
-
-      return {
-        id: replyMessage._id.toString(),
-        content: "[Encrypted Reply]", // We don't decrypt replies to avoid complexity
-        sender: {
-          id: replyMessage.sender._id.toString(),
-          name: replyMessage.sender.name,
-          email: replyMessage.sender.email,
-          avatar: replyMessage.sender.avatar,
-        },
-        messageType: replyMessage.messageType,
-        attachments: replyMessage.attachments || [],
-        reactions: [],
-        isEdited: replyMessage.isEdited || false,
-        createdAt: replyMessage.createdAt,
-        updatedAt: replyMessage.updatedAt,
-      };
-    } catch (error) {
-      console.error("Error getting reply data:", error);
-      return null;
-    }
-  }
-
   /**
-   * Get chat room messages
+   * Get chat room messages with decryption
    */
   async getChatRoomMessages(
     roomId: string,
@@ -594,6 +587,39 @@ export class ChatService {
     };
   }
 
+  private async getReplyToData(
+    replyToId: any
+  ): Promise<DecryptedMessagePreview | null> {
+    try {
+      const replyMessage = await ChatMessage.findById(replyToId).populate(
+        "sender",
+        "name email avatar"
+      );
+
+      if (!replyMessage) return null;
+
+      return {
+        id: replyMessage._id.toString(),
+        content: "[Encrypted Reply]", // We don't decrypt replies to avoid complexity
+        sender: {
+          id: replyMessage.sender._id.toString(),
+          name: replyMessage.sender.name,
+          email: replyMessage.sender.email,
+          avatar: replyMessage.sender.avatar,
+        },
+        messageType: replyMessage.messageType,
+        attachments: replyMessage.attachments || [],
+        reactions: [],
+        isEdited: replyMessage.isEdited || false,
+        createdAt: replyMessage.createdAt,
+        updatedAt: replyMessage.updatedAt,
+      };
+    } catch (error) {
+      console.error("Error getting reply data:", error);
+      return null;
+    }
+  }
+
   /**
    * Mark message as read
    */
@@ -652,7 +678,7 @@ export class ChatService {
     }
 
     // Encrypt new content
-    const { encryptedContent, encryptionData } =
+    const { content: encryptedContent, encryptionData } =
       await this.encryptionService.encryptMessage(
         newContent,
         message.room.toString(),
@@ -811,6 +837,32 @@ export class ChatService {
       message: "Encryption keys generated successfully",
       publicKey: keyPair.publicKey,
     };
+  }
+
+  /**
+   * Auto-create default workspace chat room with encryption
+   */
+  async ensureWorkspaceGeneralRoom(workspaceId: string, userId: string) {
+    // Check if general room already exists
+    const existingRoom = await ChatRoom.findOne({
+      workspace: workspaceId,
+      type: "workspace",
+      name: "General",
+    });
+
+    if (existingRoom) {
+      return existingRoom;
+    }
+
+    // Create general room
+    return this.createChatRoom(userId, {
+      workspaceId,
+      name: "General",
+      description: "General workspace discussion",
+      type: "workspace",
+      participants: [], // Will be populated with all workspace members
+      isPrivate: false,
+    });
   }
 
   /**

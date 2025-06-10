@@ -7,20 +7,41 @@ import type {
   ChatRoomsResponse,
   MessagesResponse,
   DecryptedMessage,
+  ReactionType,
 } from "@/src/types/chat.types";
-import type { ApiResponse, PaginationParams } from "@/src/types/api.types";
+import type { PaginationParams } from "@/src/types/api.types";
+import type { RootState } from "@/src/store";
+
+// Helper function to get encryption password from session storage
+const getEncryptionPassword = () => {
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    try {
+      return sessionStorage.getItem("worksphere_encryption_password") || "";
+    } catch (error) {
+      console.error("Error retrieving encryption password:", error);
+      return "";
+    }
+  }
+  return "";
+};
 
 export const chatApi = createApi({
   reducerPath: "chatApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: "/api/chat",
+    baseUrl: "/api",
+    credentials: "include",
     prepareHeaders: (headers, { getState }) => {
       headers.set("Content-Type", "application/json");
-      // Add encryption password from state if available
-      const encryptionPassword = (getState() as any).chat?.encryptionPassword;
+
+      // Try to get encryption password from Redux state first, then session storage
+      const state = getState() as RootState;
+      const encryptionPassword =
+        state.chat?.encryptionPassword || getEncryptionPassword();
+
       if (encryptionPassword) {
         headers.set("x-encryption-password", encryptionPassword);
       }
+
       return headers;
     },
   }),
@@ -28,57 +49,70 @@ export const chatApi = createApi({
   endpoints: (builder) => ({
     // Get user chat rooms
     getUserChatRooms: builder.query<ChatRoomsResponse, void>({
-      query: () => "rooms",
+      query: () => "/chat/rooms",
       providesTags: ["ChatRoom"],
-      transformResponse: (response: ApiResponse<ChatRoomsResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        // Handle both direct response and wrapped response
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to fetch chat rooms");
         }
-        throw new Error(response.message || "Failed to fetch chat rooms");
+        return response;
       },
     }),
 
-    // Get workspace chat rooms
+    // Get workspace chat rooms - FIXED ENDPOINT
     getWorkspaceChatRooms: builder.query<ChatRoomsResponse, string>({
       query: (workspaceId) => `/workspaces/${workspaceId}/chat/rooms`,
       providesTags: (result, error, workspaceId) => [
         { type: "ChatRoom", id: `workspace-${workspaceId}` },
       ],
-      transformResponse: (response: ApiResponse<ChatRoomsResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(
+            response.message || "Failed to fetch workspace chat rooms"
+          );
         }
-        throw new Error(
-          response.message || "Failed to fetch workspace chat rooms"
-        );
+        return response;
       },
     }),
 
     // Get chat room by ID
     getChatRoomById: builder.query<ChatRoomResponse, string>({
-      query: (id) => `rooms/${id}`,
+      query: (id) => `/chat/rooms/${id}`,
       providesTags: (result, error, id) => [{ type: "ChatRoom", id }],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to fetch chat room");
         }
-        throw new Error(response.message || "Failed to fetch chat room");
+        return response;
       },
     }),
 
     // Create chat room
     createChatRoom: builder.mutation<ChatRoomResponse, CreateChatRoomData>({
       query: (data) => ({
-        url: "rooms",
+        url: "/chat/rooms",
         method: "POST",
         body: data,
       }),
       invalidatesTags: ["ChatRoom"],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to create chat room");
         }
-        throw new Error(response.message || "Failed to create chat room");
+        return response;
       },
     }),
 
@@ -88,7 +122,7 @@ export const chatApi = createApi({
       { id: string; data: UpdateChatRoomData }
     >({
       query: ({ id, data }) => ({
-        url: `rooms/${id}`,
+        url: `/chat/rooms/${id}`,
         method: "PUT",
         body: data,
       }),
@@ -96,11 +130,14 @@ export const chatApi = createApi({
         { type: "ChatRoom", id },
         "ChatRoom",
       ],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to update chat room");
         }
-        throw new Error(response.message || "Failed to update chat room");
+        return response;
       },
     }),
 
@@ -118,23 +155,29 @@ export const chatApi = createApi({
         if (pagination.sortOrder)
           searchParams.append("sortOrder", pagination.sortOrder);
 
-        return `rooms/${roomId}/messages?${searchParams.toString()}`;
+        const queryString = searchParams.toString();
+        return `/chat/rooms/${roomId}/messages${
+          queryString ? `?${queryString}` : ""
+        }`;
       },
       providesTags: (result, error, { roomId }) => [
         { type: "ChatMessage", id: `room-${roomId}` },
       ],
-      transformResponse: (response: ApiResponse<MessagesResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to fetch messages");
         }
-        throw new Error(response.message || "Failed to fetch messages");
+        return response;
       },
     }),
 
     // Send message
     sendMessage: builder.mutation<DecryptedMessage, SendMessageData>({
       query: (data) => ({
-        url: "messages",
+        url: "/chat/messages",
         method: "POST",
         body: data,
       }),
@@ -142,11 +185,32 @@ export const chatApi = createApi({
         { type: "ChatMessage", id: `room-${data.roomId}` },
         { type: "ChatRoom", id: data.roomId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to send message");
         }
-        throw new Error(response.message || "Failed to send message");
+        return response;
+      },
+    }),
+
+    // Ensure workspace general room exists - FIXED ENDPOINT
+    ensureWorkspaceGeneralRoom: builder.mutation<ChatRoomResponse, string>({
+      query: (workspaceId) => ({
+        url: `/workspaces/${workspaceId}/chat/rooms/ensure-general`,
+        method: "POST",
+      }),
+      invalidatesTags: ["ChatRoom"],
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to ensure general room");
+        }
+        return response;
       },
     }),
 
@@ -156,24 +220,25 @@ export const chatApi = createApi({
       string
     >({
       query: (messageId) => ({
-        url: `messages/${messageId}/read`,
+        url: `/chat/messages/${messageId}/read`,
         method: "POST",
       }),
       invalidatesTags: (result, error, messageId) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (
-        response: ApiResponse<{ success: boolean; message: string }>
-      ) => {
-        if (response.success) {
-          return (
-            response.data || {
-              success: true,
-              message: "Message marked as read",
-            }
-          );
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success) {
+            return (
+              response.data || {
+                success: true,
+                message: "Message marked as read",
+              }
+            );
+          }
+          throw new Error(response.message || "Failed to mark message as read");
         }
-        throw new Error(response.message || "Failed to mark message as read");
+        return response;
       },
     }),
 
@@ -183,18 +248,21 @@ export const chatApi = createApi({
       { messageId: string; content: string }
     >({
       query: ({ messageId, content }) => ({
-        url: `messages/${messageId}`,
+        url: `/chat/messages/${messageId}`,
         method: "PUT",
         body: { content },
       }),
       invalidatesTags: (result, error, { messageId }) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to edit message");
         }
-        throw new Error(response.message || "Failed to edit message");
+        return response;
       },
     }),
 
@@ -204,40 +272,46 @@ export const chatApi = createApi({
       string
     >({
       query: (messageId) => ({
-        url: `messages/${messageId}`,
+        url: `/chat/messages/${messageId}`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, messageId) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (
-        response: ApiResponse<{ success: boolean; message: string }>
-      ) => {
-        if (response.success) {
-          return response.data || { success: true, message: "Message deleted" };
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success) {
+            return (
+              response.data || { success: true, message: "Message deleted" }
+            );
+          }
+          throw new Error(response.message || "Failed to delete message");
         }
-        throw new Error(response.message || "Failed to delete message");
+        return response;
       },
     }),
 
     // Add reaction
     addReaction: builder.mutation<
       DecryptedMessage,
-      { messageId: string; type: string; emoji?: string }
+      { messageId: string; type: ReactionType; emoji?: string }
     >({
       query: ({ messageId, type, emoji }) => ({
-        url: `messages/${messageId}/reactions`,
+        url: `/chat/messages/${messageId}/reactions`,
         method: "POST",
         body: { type, emoji },
       }),
       invalidatesTags: (result, error, { messageId }) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to add reaction");
         }
-        throw new Error(response.message || "Failed to add reaction");
+        return response;
       },
     }),
 
@@ -247,17 +321,20 @@ export const chatApi = createApi({
       { messageId: string; reactionType: string }
     >({
       query: ({ messageId, reactionType }) => ({
-        url: `messages/${messageId}/reactions/${reactionType}`,
+        url: `/chat/messages/${messageId}/reactions/${reactionType}`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, { messageId }) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to remove reaction");
         }
-        throw new Error(response.message || "Failed to remove reaction");
+        return response;
       },
     }),
 
@@ -267,7 +344,7 @@ export const chatApi = createApi({
       { roomId: string; participantIds: string[] }
     >({
       query: ({ roomId, participantIds }) => ({
-        url: `rooms/${roomId}/participants`,
+        url: `/chat/rooms/${roomId}/participants`,
         method: "POST",
         body: { participantIds },
       }),
@@ -275,11 +352,14 @@ export const chatApi = createApi({
         { type: "ChatRoom", id: roomId },
         { type: "ChatParticipants", id: roomId },
       ],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to add participants");
         }
-        throw new Error(response.message || "Failed to add participants");
+        return response;
       },
     }),
 
@@ -289,18 +369,21 @@ export const chatApi = createApi({
       { roomId: string; participantId: string }
     >({
       query: ({ roomId, participantId }) => ({
-        url: `rooms/${roomId}/participants/${participantId}`,
+        url: `/chat/rooms/${roomId}/participants/${participantId}`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, { roomId }) => [
         { type: "ChatRoom", id: roomId },
         { type: "ChatParticipants", id: roomId },
       ],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (response.success && response.data) {
-          return response.data;
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success && response.data) {
+            return response.data;
+          }
+          throw new Error(response.message || "Failed to remove participant");
         }
-        throw new Error(response.message || "Failed to remove participant");
+        return response;
       },
     }),
 
@@ -310,22 +393,25 @@ export const chatApi = createApi({
       { password: string }
     >({
       query: ({ password }) => ({
-        url: "encryption/initialize",
+        url: "/chat/encryption/initialize",
         method: "POST",
         body: { password },
       }),
-      transformResponse: (
-        response: ApiResponse<{ success: boolean; message: string }>
-      ) => {
-        if (response.success) {
-          return (
-            response.data || {
-              success: true,
-              message: "Encryption initialized",
-            }
+      transformResponse: (response: any) => {
+        if (response.success !== undefined) {
+          if (response.success) {
+            return (
+              response.data || {
+                success: true,
+                message: "Encryption initialized",
+              }
+            );
+          }
+          throw new Error(
+            response.message || "Failed to initialize encryption"
           );
         }
-        throw new Error(response.message || "Failed to initialize encryption");
+        return response;
       },
     }),
   }),
@@ -347,4 +433,5 @@ export const {
   useAddParticipantsMutation,
   useRemoveParticipantMutation,
   useInitializeUserEncryptionMutation,
+  useEnsureWorkspaceGeneralRoomMutation,
 } = chatApi;

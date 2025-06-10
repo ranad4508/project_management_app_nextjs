@@ -13,11 +13,14 @@ export class SocketService {
 
   initialize(server: HttpServer): void {
     this.io = new SocketServer(server, {
+      path: "/api/socketio",
       cors: {
         origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
         methods: ["GET", "POST"],
         credentials: true,
       },
+      transports: ["websocket", "polling"],
+      allowEIO3: true,
     });
 
     this.io.use(async (socket: Socket, next) => {
