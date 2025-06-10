@@ -64,9 +64,10 @@ export class WorkspaceController {
   getWorkspaceById = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
 
       const workspace = await this.workspaceService.getWorkspaceById(
@@ -84,9 +85,10 @@ export class WorkspaceController {
   updateWorkspace = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
       const body = await req.json();
       const validatedData = validateSchema(schemas.updateWorkspace, body);
@@ -108,9 +110,10 @@ export class WorkspaceController {
   deleteWorkspace = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
 
       const result = await this.workspaceService.deleteWorkspace(id, user.id);
@@ -125,9 +128,10 @@ export class WorkspaceController {
   inviteMember = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
       const body = await req.json();
       const validatedData = validateSchema(schemas.inviteMember, body);
@@ -148,9 +152,10 @@ export class WorkspaceController {
   getWorkspaceMembers = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
 
       const result = await this.workspaceService.getWorkspaceMembers(
@@ -168,9 +173,10 @@ export class WorkspaceController {
   updateMemberRole = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string; userId: string } }
+      context: { params: Promise<{ id: string; userId: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id, userId } = params;
       const { role } = await req.json();
 
@@ -191,9 +197,10 @@ export class WorkspaceController {
   removeMember = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string; userId: string } }
+      context: { params: Promise<{ id: string; userId: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id, userId } = params;
 
       const result = await this.workspaceService.removeMember(
@@ -209,38 +216,56 @@ export class WorkspaceController {
     }
   );
 
+  /**
+   * Accept invitation - handles both authenticated and unauthenticated users
+   */
   acceptInvitation = asyncHandler(
     async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-      const { token } = await req.json();
+      const body = await req.json();
+      const { token, userId } = body;
 
-      // Try to get user from session (optional for this endpoint)
-      let userId: string | undefined;
-      try {
-        const user = await requireAuth(req);
-        userId = user.id;
-      } catch {
-        // User not logged in, that's okay for invitation acceptance
+      if (!token) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Token is required",
+          },
+          { status: 400 }
+        );
       }
 
-      const result = await this.workspaceService.acceptInvitation(
-        token,
-        userId
-      );
+      try {
+        const result = await this.workspaceService.acceptInvitation(
+          token,
+          userId
+        );
 
-      return NextResponse.json({
-        success: true,
-        data: result,
-        message: result.message || "Invitation details retrieved",
-      });
+        return NextResponse.json({
+          success: true,
+          data: result,
+          message: "Invitation accepted successfully",
+        });
+      } catch (error: any) {
+        console.error("Accept invitation error:", error);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message || "Failed to accept invitation",
+          },
+          { status: error.statusCode || 500 }
+        );
+      }
     }
   );
 
   getWorkspaceSettings = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
 
       const result = await this.workspaceService.getWorkspaceSettings(
@@ -258,9 +283,10 @@ export class WorkspaceController {
   updateWorkspaceSettings = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      context: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
+      const params = await context.params;
       const { id } = params;
       const body = await req.json();
 

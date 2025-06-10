@@ -112,9 +112,8 @@ const WorkspaceSchema: Schema = new Schema(
           type: [Number],
           default: [1, 2, 3, 4, 5], // Monday to Friday
           validate: {
-            validator: function (days: number[]) {
-              return days.every((day) => day >= 0 && day <= 6);
-            },
+            validator: (days: number[]) =>
+              days.every((day) => day >= 0 && day <= 6),
             message: "Days must be between 0 (Sunday) and 6 (Saturday)",
           },
         },
@@ -124,7 +123,7 @@ const WorkspaceSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// Indexes
+// Remove duplicate indexes - only keep necessary ones
 WorkspaceSchema.index({ slug: 1 });
 WorkspaceSchema.index({ owner: 1 });
 WorkspaceSchema.index({ "members.user": 1 });

@@ -22,6 +22,16 @@ export interface PaginationResponse {
   hasPrev: boolean;
 }
 
+export interface FilterParams {
+  search?: string;
+  status?: string;
+  priority?: string;
+  assignedTo?: string;
+  createdBy?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export interface ErrorResponse {
   success: false;
   message: string;

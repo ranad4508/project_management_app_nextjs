@@ -34,6 +34,83 @@ export class WorkspaceService {
   }
 
   /**
+   * Accept invitation
+   */
+  async acceptInvitation(token: string, userId?: string) {
+    const invitation = await Invitation.findOne({
+      token,
+      status: InvitationStatus.PENDING,
+    }).populate("workspace");
+
+    if (!invitation || invitation.isExpired()) {
+      throw new ValidationError("Invalid or expired invitation");
+    }
+
+    const workspace = invitation.workspace as any;
+
+    // If user is logged in, check email match and add to workspace
+    if (userId) {
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new NotFoundError("User not found");
+      }
+
+      if (user.email !== invitation.email) {
+        throw new ValidationError(
+          "Invitation email does not match your account"
+        );
+      }
+
+      // Check if user is already a member
+      if (workspace.isMember(userId)) {
+        throw new ConflictError("You are already a member of this workspace");
+      }
+
+      // Add user to workspace
+      workspace.members.push({
+        user: userId,
+        role: invitation.role,
+        joinedAt: new Date(),
+        permissions: [],
+      });
+
+      await workspace.save();
+
+      // Update invitation status
+      invitation.status = InvitationStatus.ACCEPTED;
+      invitation.acceptedAt = new Date();
+      await invitation.save();
+
+      // Send notification to workspace admins
+      try {
+        await this.notificationService.notifyWorkspaceAdmins(
+          workspace._id,
+          `${user.name} joined the workspace`,
+          `${user.name} has accepted the invitation and joined ${workspace.name}`
+        );
+      } catch (error) {
+        console.error("Failed to send notification:", error);
+        // Don't fail the invitation acceptance if notification fails
+      }
+
+      return {
+        message: "Invitation accepted successfully",
+        workspace: workspace._id.toString(),
+      };
+    }
+
+    // Return invitation details for registration
+    return {
+      invitation: {
+        email: invitation.email,
+        workspaceName: workspace.name,
+        role: invitation.role,
+        token,
+      },
+    };
+  }
+
+  /**
    * Create a new workspace
    */
   async createWorkspace(userId: string, data: CreateWorkspaceData) {
@@ -152,9 +229,10 @@ export class WorkspaceService {
     // Get workspace statistics
     const stats = await this.getWorkspaceStats(workspaceId);
 
-    // Get recent projects
+    // Get recent projects - Fix: populate 'members' instead of 'assignedTo'
     const projects = await Project.find({ workspace: workspaceId })
-      .populate("assignedTo", "name email avatar")
+      .populate("members", "name email avatar")
+      .populate("createdBy", "name email avatar")
       .sort({ updatedAt: -1 })
       .limit(10);
 
@@ -168,9 +246,25 @@ export class WorkspaceService {
         });
 
         return {
-          ...project.toObject(),
+          _id: project._id.toString(),
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
           tasksCount: totalTasks,
           completedTasks,
+          assignedTo: project.members || [], // Map members to assignedTo for compatibility
+          dueDate: project.dueDate,
+          stats: {
+            completionPercentage:
+              totalTasks > 0
+                ? Math.round((completedTasks / totalTasks) * 100)
+                : 0,
+            totalTasks,
+            completedTasks,
+          },
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
         };
       })
     );
@@ -358,69 +452,6 @@ export class WorkspaceService {
     );
 
     return { message: "Invitation sent successfully" };
-  }
-
-  /**
-   * Accept invitation
-   */
-  async acceptInvitation(token: string, userId?: string) {
-    const invitation = await Invitation.findOne({
-      token,
-      status: InvitationStatus.PENDING,
-    }).populate("workspace");
-
-    if (!invitation || invitation.isExpired()) {
-      throw new ValidationError("Invalid or expired invitation");
-    }
-
-    const workspace = invitation.workspace as any;
-
-    // If user is logged in, check email match
-    if (userId) {
-      const user = await User.findById(userId);
-      if (user!.email !== invitation.email) {
-        throw new ValidationError(
-          "Invitation email does not match your account"
-        );
-      }
-
-      // Add user to workspace
-      workspace.members.push({
-        user: userId,
-        role: invitation.role,
-        joinedAt: new Date(),
-        permissions: [],
-      });
-
-      await workspace.save();
-
-      // Update invitation status
-      invitation.status = InvitationStatus.ACCEPTED;
-      invitation.acceptedAt = new Date();
-      await invitation.save();
-
-      // Send notification to workspace admins
-      await this.notificationService.notifyWorkspaceAdmins(
-        workspace._id,
-        `${user!.name} joined the workspace`,
-        `${user!.name} has accepted the invitation and joined ${workspace.name}`
-      );
-
-      return {
-        message: "Invitation accepted successfully",
-        workspace: workspace._id,
-      };
-    }
-
-    // Return invitation details for registration
-    return {
-      invitation: {
-        email: invitation.email,
-        workspaceName: workspace.name,
-        role: invitation.role,
-        token,
-      },
-    };
   }
 
   /**

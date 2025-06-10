@@ -1,5 +1,6 @@
 import type { MemberRole } from "@/src/enums/user.enum";
 import type { WorkspaceStatus } from "@/src/enums/workspace.enum";
+import type { ProjectPriority, ProjectStatus } from "@/src/enums/project.enum";
 
 export interface User {
   _id: string;
@@ -29,10 +30,17 @@ export interface WorkspaceProject {
   _id: string;
   name: string;
   description?: string;
-  status: string;
+  status: ProjectStatus;
+  priority: ProjectPriority;
   tasksCount: number;
   completedTasks: number;
   assignedTo: User[];
+  dueDate?: Date;
+  stats?: {
+    completionPercentage: number;
+    totalTasks: number;
+    completedTasks: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }

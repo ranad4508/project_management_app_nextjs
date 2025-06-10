@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -10,6 +12,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,17 +34,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
-  Users,
-  FolderOpen,
-  Calendar,
+  MessageSquare,
   Settings,
   Loader2,
   Plus,
-  MessageSquare,
-  BarChart3,
   Mail,
+  Search,
+  FolderOpen,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -50,7 +53,21 @@ import {
   useUpdateMemberRoleMutation,
   useRemoveMemberMutation,
 } from "@/src/store/api/workspaceApi";
+import {
+  useGetWorkspaceProjectsQuery,
+  useCreateProjectMutation,
+  useUpdateProjectMutation,
+  useArchiveProjectMutation,
+  useDeleteProjectMutation,
+} from "@/src/store/api/projectApi";
 import { MemberRole } from "@/src/enums/user.enum";
+import { ProjectStatus } from "@/src/enums/project.enum";
+import { WorkspaceStatsCards } from "@/components/workspace/workspace-stats";
+import { ProjectCard } from "@/components/workspace/project-card";
+import { ProjectDialog } from "@/components/workspace/project-dialog";
+import { MemberCard } from "@/components/workspace/member-card";
+import type { Project } from "@/src/types/project.types";
+import type { WorkspaceProject } from "@/src/types/workspace.types";
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -61,12 +78,21 @@ export default function WorkspacePage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<MemberRole>(MemberRole.MEMBER);
 
+  // Project state
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectFilter, setProjectFilter] = useState<ProjectStatus | "all">(
+    "all"
+  );
+  const [projectPage, setProjectPage] = useState(1);
+  const [editingProject, setEditingProject] = useState<string | null>(null);
+
   // Redux queries
   const {
     data: workspace,
-    isLoading,
-    error,
-    refetch,
+    isLoading: workspaceLoading,
+    error: workspaceError,
+    refetch: refetchWorkspace,
   } = useGetWorkspaceByIdQuery(workspaceId, {
     skip: !workspaceId,
   });
@@ -79,15 +105,47 @@ export default function WorkspacePage() {
     skip: !workspaceId || activeTab !== "members",
   });
 
+  // Project queries
+  const {
+    data: projectsData,
+    isLoading: projectsLoading,
+    isFetching: projectsFetching,
+    refetch: refetchProjects,
+  } = useGetWorkspaceProjectsQuery(
+    {
+      workspaceId,
+      pagination: {
+        page: projectPage,
+        limit: 9,
+        sortBy: "updatedAt",
+        sortOrder: "desc",
+      },
+      filters: {
+        search: projectSearch || undefined,
+        status: projectFilter !== "all" ? projectFilter : undefined,
+      },
+    },
+    {
+      skip: !workspaceId || activeTab !== "projects",
+    }
+  );
+
   // Mutations
   const [inviteMember, { isLoading: isInviting }] = useInviteMemberMutation();
-  const [updateMemberRole, { isLoading: isUpdatingRole }] =
-    useUpdateMemberRoleMutation();
-  const [removeMember, { isLoading: isRemoving }] = useRemoveMemberMutation();
+  const [updateMemberRole] = useUpdateMemberRoleMutation();
+  const [removeMember] = useRemoveMemberMutation();
+
+  // Project mutations
+  const [createProject, { isLoading: isCreatingProject }] =
+    useCreateProjectMutation();
+  const [updateProject, { isLoading: isUpdatingProject }] =
+    useUpdateProjectMutation();
+  const [archiveProject] = useArchiveProjectMutation();
+  const [deleteProject] = useDeleteProjectMutation();
 
   const getUserRole = () => {
     if (!workspace || !session?.user) return MemberRole.MEMBER;
-    if (workspace.owner._id === session.user.id) return MemberRole.ADMIN; // Owner is treated as admin
+    if (workspace.owner._id === session.user.id) return MemberRole.ADMIN;
     const member = workspace.members.find(
       (m) => m.user._id === session.user.id
     );
@@ -154,15 +212,148 @@ export default function WorkspacePage() {
     }
   };
 
-  if (isLoading) {
+  // Project handlers
+  const handleCreateProject = async (data: {
+    name: string;
+    description?: string;
+    priority: any;
+    dueDate?: string;
+  }) => {
+    try {
+      if (editingProject) {
+        await updateProject({
+          id: editingProject,
+          data,
+        }).unwrap();
+        toast.success("Project updated successfully");
+      } else {
+        await createProject({
+          ...data,
+          workspaceId,
+        }).unwrap();
+        toast.success("Project created successfully");
+      }
+
+      setProjectDialogOpen(false);
+      setEditingProject(null);
+      refetchProjects();
+      refetchWorkspace();
+    } catch (error: any) {
+      toast.error(
+        error?.data?.error ||
+          `Failed to ${editingProject ? "update" : "create"} project`
+      );
+      throw error;
+    }
+  };
+
+  const handleArchiveProject = async (projectId: string) => {
+    try {
+      await archiveProject(projectId).unwrap();
+      toast.success("Project archived successfully");
+      refetchProjects();
+      refetchWorkspace();
+    } catch (error: any) {
+      toast.error(error?.data?.error || "Failed to archive project");
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      await deleteProject(projectId).unwrap();
+      toast.success("Project deleted successfully");
+      refetchProjects();
+      refetchWorkspace();
+    } catch (error: any) {
+      toast.error(error?.data?.error || "Failed to delete project");
+    }
+  };
+
+  const handleEditProject = (projectId: string) => {
+    setEditingProject(projectId);
+    setProjectDialogOpen(true);
+  };
+
+  // Helper function to adapt WorkspaceProject to Project
+  const adaptProject = (project: WorkspaceProject): Project => {
+    return {
+      ...project,
+      workspaceId,
+      members: [],
+      assignedTo: project.assignedTo || [],
+      tasksCount: project.tasksCount || 0,
+      completedTasks: project.completedTasks || 0,
+      stats: {
+        totalTasks: project.stats?.totalTasks || project.tasksCount || 0,
+        completedTasks:
+          project.stats?.completedTasks || project.completedTasks || 0,
+        inProgressTasks: 0,
+        overdueTasks: 0,
+        completionPercentage: project.stats?.completionPercentage || 0,
+      },
+    };
+  };
+
+  // Find editing project and adapt it if needed
+  const getEditingProject = (): Project | null => {
+    if (!editingProject) return null;
+
+    // Try to find in workspace projects
+    if (workspace?.projects) {
+      const workspaceProject = workspace.projects.find(
+        (p) => p._id === editingProject
+      );
+      if (workspaceProject) {
+        return adaptProject(workspaceProject);
+      }
+    }
+
+    // Try to find in fetched projects
+    if (projectsData?.projects) {
+      const fetchedProject = projectsData.projects.find(
+        (p) => p._id === editingProject
+      );
+      if (fetchedProject) {
+        return fetchedProject as any;
+      }
+    }
+
+    return null;
+  };
+
+  if (workspaceLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="space-y-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-96" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-24" />
+            <Skeleton className="h-10 w-24" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Array(4)
+            .fill(0)
+            .map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="pb-2">
+                  <Skeleton className="h-4 w-24" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-12" />
+                </CardContent>
+              </Card>
+            ))}
+        </div>
       </div>
     );
   }
 
-  if (error || !workspace) {
+  if (workspaceError || !workspace) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -171,11 +362,13 @@ export default function WorkspacePage() {
             The workspace you're looking for doesn't exist or you don't have
             access to it.
           </p>
-          <Button onClick={() => refetch()}>Retry</Button>
+          <Button onClick={() => refetchWorkspace()}>Retry</Button>
         </div>
       </div>
     );
   }
+
+  const editingProjectData = getEditingProject();
 
   return (
     <div className="space-y-6">
@@ -220,61 +413,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Projects
-            </CardTitle>
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {workspace.stats.totalProjects}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {workspace.stats.totalTasks}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Completed Tasks
-            </CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {workspace.stats.completedTasks}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {workspace.stats.completionRate}% completion rate
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Members
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {workspace.stats.activeMembers}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <WorkspaceStatsCards stats={workspace.stats} />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -330,6 +469,16 @@ export default function WorkspacePage() {
                   </p>
                 )}
               </CardContent>
+              <CardFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setActiveTab("projects")}
+                >
+                  View All Projects
+                </Button>
+              </CardFooter>
             </Card>
 
             {/* Team Activity */}
@@ -368,100 +517,148 @@ export default function WorkspacePage() {
                   </div>
                 ))}
               </CardContent>
+              <CardFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setActiveTab("members")}
+                >
+                  View All Members
+                </Button>
+              </CardFooter>
             </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="projects" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-medium">Projects</h3>
-            <Button asChild>
-              <Link href={`/dashboard/workspaces/${workspaceId}/projects/new`}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Project
-              </Link>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search projects..."
+                  className="pl-8"
+                  value={projectSearch}
+                  onChange={(e) => setProjectSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                value={projectFilter}
+                onValueChange={(value) =>
+                  setProjectFilter(value as ProjectStatus | "all")
+                }
+              >
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  <SelectItem value={ProjectStatus.ACTIVE}>Active</SelectItem>
+                  <SelectItem value={ProjectStatus.COMPLETED}>
+                    Completed
+                  </SelectItem>
+                  <SelectItem value={ProjectStatus.ARCHIVED}>
+                    Archived
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => setProjectDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Project
             </Button>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {workspace.projects && workspace.projects.length > 0 ? (
-              workspace.projects.map((project) => (
-                <Card key={project._id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">
-                        <Link
-                          href={`/dashboard/projects/${project._id}`}
-                          className="hover:text-blue-600 transition-colors"
-                        >
-                          {project.name}
-                        </Link>
-                      </CardTitle>
-                      <Badge
-                        variant={
-                          project.status === "active" ? "default" : "secondary"
-                        }
-                      >
-                        {project.status}
-                      </Badge>
-                    </div>
-                    {project.description && (
-                      <CardDescription className="line-clamp-2">
-                        {project.description}
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>
-                        {project.completedTasks}/{project.tasksCount} tasks
-                      </span>
-                      <span className="text-muted-foreground">
-                        {project.tasksCount > 0
-                          ? Math.round(
-                              (project.completedTasks / project.tasksCount) *
-                                100
-                            )
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{
-                          width: `${
-                            project.tasksCount > 0
-                              ? (project.completedTasks / project.tasksCount) *
-                                100
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Created {new Date(project.createdAt).toLocaleDateString()}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-12">
-                <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">No projects yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Create your first project to get started.
-                </p>
-                <Button asChild>
-                  <Link
-                    href={`/dashboard/workspaces/${workspaceId}/projects/new`}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Project
-                  </Link>
-                </Button>
+
+          {projectsLoading || projectsFetching ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {Array(6)
+                .fill(0)
+                .map((_, i) => (
+                  <Card key={i}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <Skeleton className="h-5 w-40 mb-2" />
+                          <Skeleton className="h-4 w-60" />
+                        </div>
+                        <Skeleton className="h-6 w-20" />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-4 w-10" />
+                      </div>
+                      <Skeleton className="h-2 w-full" />
+                      <Skeleton className="h-4 w-32" />
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          ) : projectsData && projectsData.projects.length > 0 ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {projectsData.projects.map((project) => (
+                  <ProjectCard
+                    key={project._id}
+                    project={project as any}
+                    onEdit={handleEditProject}
+                    onArchive={handleArchiveProject}
+                    onDelete={handleDeleteProject}
+                  />
+                ))}
               </div>
-            )}
-          </div>
+
+              {/* Pagination */}
+              {projectsData.pagination.totalPages > 1 && (
+                <div className="flex items-center justify-center space-x-2 mt-6">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setProjectPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    disabled={projectPage === 1 || projectsLoading}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {projectPage} of {projectsData.pagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setProjectPage((prev) =>
+                        Math.min(prev + 1, projectsData.pagination.totalPages)
+                      )
+                    }
+                    disabled={
+                      projectPage === projectsData.pagination.totalPages ||
+                      projectsLoading
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">No projects found</h3>
+              <p className="text-muted-foreground mb-4">
+                {projectSearch || projectFilter !== "all"
+                  ? "Try adjusting your search or filter criteria."
+                  : "Create your first project to get started."}
+              </p>
+              <Button onClick={() => setProjectDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Project
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="members" className="space-y-4">
@@ -518,7 +715,7 @@ export default function WorkspacePage() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex justify-end gap-2">
+                    <DialogFooter>
                       <Button
                         type="button"
                         variant="outline"
@@ -539,7 +736,7 @@ export default function WorkspacePage() {
                           </>
                         )}
                       </Button>
-                    </div>
+                    </DialogFooter>
                   </form>
                 </DialogContent>
               </Dialog>
@@ -547,66 +744,42 @@ export default function WorkspacePage() {
           </div>
 
           {membersLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
+            <div className="space-y-4">
+              {Array(5)
+                .fill(0)
+                .map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div>
+                          <Skeleton className="h-5 w-32 mb-1" />
+                          <Skeleton className="h-4 w-48" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-6 w-20" />
+                    </CardContent>
+                  </Card>
+                ))}
             </div>
           ) : (
             <div className="grid gap-4">
               {(membersData?.members || workspace.members).map((member) => (
-                <Card key={member.user._id}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage
-                          src={member.user.avatar || "/placeholder.svg"}
-                        />
-                        <AvatarFallback>
-                          {member.user.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{member.user.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {member.user.email}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Joined{" "}
-                          {new Date(member.joinedAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={
-                          member.role === MemberRole.ADMIN
-                            ? "default"
-                            : "outline"
-                        }
-                      >
-                        {member.user._id === workspace.owner._id
-                          ? "Owner"
-                          : member.role}
-                      </Badge>
-                      {isAdmin() &&
-                        member.user._id !== session?.user?.id &&
-                        member.user._id !== workspace.owner._id && (
-                          <Button variant="ghost" size="sm">
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                        )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <MemberCard
+                  key={member.user._id}
+                  member={member}
+                  owner={workspace.owner}
+                  currentUserId={session?.user?.id}
+                  isAdmin={isAdmin()}
+                  onUpdateRole={handleUpdateRole}
+                  onRemoveMember={handleRemoveMember}
+                />
               ))}
 
               {/* Pending Invitations */}
               {membersData?.pendingInvitations &&
                 membersData.pendingInvitations.length > 0 && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 mt-6">
                     <h4 className="text-sm font-medium text-muted-foreground">
                       Pending Invitations
                     </h4>
@@ -634,6 +807,15 @@ export default function WorkspacePage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Project Dialog */}
+      <ProjectDialog
+        open={projectDialogOpen}
+        onOpenChange={setProjectDialogOpen}
+        onSubmit={handleCreateProject}
+        editingProject={editingProjectData}
+        isLoading={isCreatingProject || isUpdatingProject}
+      />
     </div>
   );
 }

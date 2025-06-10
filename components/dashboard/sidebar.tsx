@@ -11,6 +11,7 @@ import {
   ChevronRight,
   LayoutDashboard,
   LogOut,
+  LucideProjector,
   MessageSquare,
   PlusCircle,
   Settings2,
@@ -80,6 +81,13 @@ export function DashboardSidebar() {
               icon={<Users className="h-4 w-4" />}
               label="Workspaces"
               isActive={pathname.startsWith("/dashboard/workspaces")}
+              isCollapsed={isCollapsed}
+            />
+            <NavItem
+              href="/dashboard/projects"
+              icon={<LucideProjector className="h-4 w-4" />}
+              label="Projects"
+              isActive={pathname.startsWith("/dashboard/projects")}
               isCollapsed={isCollapsed}
             />
             <NavItem
