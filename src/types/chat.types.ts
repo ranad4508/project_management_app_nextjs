@@ -1,78 +1,155 @@
-import type { Types } from "mongoose"
+import type { Types } from "mongoose";
+
+export type ChatRoomType = "direct" | "group" | "workspace";
+export type MessageType = "text" | "file" | "image" | "system";
+export type ReactionType =
+  | "like"
+  | "love"
+  | "laugh"
+  | "wow"
+  | "sad"
+  | "angry"
+  | "thumbsup"
+  | "thumbsdown"
+  | "custom";
 
 export interface CreateChatRoomData {
-  workspaceId: string
-  name: string
-  description?: string
-  type: "direct" | "group" | "workspace"
-  participants: string[]
-  isPrivate?: boolean
+  workspaceId: string;
+  name: string;
+  description?: string;
+  type: ChatRoomType;
+  participants: string[];
+  isPrivate?: boolean;
 }
 
 export interface UpdateChatRoomData {
-  name?: string
-  description?: string
-  isPrivate?: boolean
+  name?: string;
+  description?: string;
+  isPrivate?: boolean;
 }
 
 export interface SendMessageData {
-  roomId: string
-  content: string
-  messageType?: "text" | "file" | "image"
-  replyTo?: string
-  mentions?: string[]
-  attachments?: {
-    name: string
-    url: string
-    type: string
-    size: number
-  }[]
+  roomId: string;
+  content: string;
+  messageType?: MessageType;
+  replyTo?: string;
+  mentions?: string[];
+  attachments?: MessageAttachment[];
+}
+
+export interface MessageAttachment {
+  name: string;
+  url: string;
+  type: string;
+  size: number;
+}
+
+export interface MessageReaction {
+  user: string | { id: string; name: string; email: string; avatar?: string };
+  type: ReactionType;
+  emoji?: string;
+  createdAt: Date;
+}
+
+export interface MessageEncryptionData {
+  iv: string;
+  tag: string;
+  senderPublicKey: string;
 }
 
 export interface EncryptedMessageData {
-  content: string
-  encryptionData: {
-    iv: string
-    tag: string
-    senderPublicKey: string
-  }
-}
-
-export interface ChatRoomMember {
-  user: Types.ObjectId | string
-  role: "admin" | "member"
-  joinedAt: Date
+  content: string;
+  encryptionData: MessageEncryptionData;
 }
 
 export interface MessageReadStatus {
-  user: Types.ObjectId | string
-  readAt: Date
-}
-
-export interface UserKeyPairData {
-  publicKey: string
-  privateKeyEncrypted: string
-  keyVersion: number
-}
-
-export interface ChatRoomKeyData {
-  roomId: string
-  encryptedRoomKey: string
-  keyVersion: number
+  user: string | Types.ObjectId;
+  readAt: Date;
 }
 
 export interface DecryptedMessage {
-  id: string
-  content: string
-  sender: any
-  messageType: string
-  replyTo?: any
-  mentions: any[]
-  attachments: any[]
-  isEdited: boolean
-  editedAt?: Date
-  deletedAt?: Date
-  readBy: MessageReadStatus[]
-  createdAt: Date
-  updatedAt: Date
+  id: string;
+  content: string;
+  sender: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  messageType: MessageType;
+  replyTo?: DecryptedMessagePreview | null;
+  mentions: Array<{
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  }>;
+  attachments: MessageAttachment[];
+  reactions: MessageReaction[];
+  isEdited: boolean;
+  editedAt?: Date;
+  deletedAt?: Date;
+  readBy: MessageReadStatus[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DecryptedMessagePreview {
+  id: string;
+  content: string;
+  sender: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  messageType: MessageType;
+  attachments: MessageAttachment[];
+  reactions: MessageReaction[];
+  isEdited: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SocketMessagePayload {
+  roomId: string;
+  message: {
+    content: string;
+    messageType?: MessageType;
+    replyTo?: string;
+    mentions?: string[];
+    attachments?: MessageAttachment[];
+  };
+}
+
+export interface SocketReactionPayload {
+  roomId: string;
+  messageId: string;
+  reactionType: ReactionType;
+  emoji?: string;
+}
+
+export interface SocketTypingPayload {
+  roomId: string;
+  userId: string;
+  userName: string;
+  isTyping: boolean;
+}
+
+export interface ChatRoomMember {
+  user: Types.ObjectId | string;
+  role: string;
+  joinedAt: Date;
+}
+
+export interface UserKeyPairData {
+  publicKey: string;
+  privateKeyEncrypted: string;
+  keyVersion: number;
+}
+
+export interface ChatRoomKeyData {
+  roomId: string;
+  encryptedRoomKey: string;
+  keyVersion: number;
 }

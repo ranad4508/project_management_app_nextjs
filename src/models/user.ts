@@ -1,32 +1,42 @@
-import mongoose, { Schema, type Document } from "mongoose"
-import { UserRole, UserStatus } from "@/src/enums/user.enum"
+import mongoose, { Document, Schema } from "mongoose";
+import { UserRole } from "@/src/enums/user.enum";
 
 export interface IUser extends Document {
-  name: string
-  email: string
-  password: string
-  role: UserRole
-  status: UserStatus
-  isVerified: boolean
-  verificationToken?: string
-  verificationTokenExpiry?: Date
-  resetPasswordToken?: string
-  resetPasswordTokenExpiry?: Date
-  mfaEnabled: boolean
-  mfaSecret?: string
-  avatar?: string
-  lastLoginAt?: Date
-  createdAt: Date
-  updatedAt: Date
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  avatar?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  timezone?: string;
+  language?: string;
+  isVerified: boolean;
+  verificationToken?: string;
+  verificationTokenExpiry?: Date;
+  resetPasswordToken?: string;
+  resetPasswordTokenExpiry?: Date;
+  mfaEnabled: boolean;
+  mfaSecret?: string;
+  tempMfaCode?: string;
+  tempMfaCodeExpiry?: Date;
+  preferences: {
+    theme: "light" | "dark" | "system";
+    emailNotifications: boolean;
+    pushNotifications: boolean;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const UserSchema: Schema = new Schema(
+const userSchema = new Schema<IUser>(
   {
     name: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 50,
     },
     email: {
       type: String,
@@ -38,67 +48,71 @@ const UserSchema: Schema = new Schema(
     password: {
       type: String,
       required: true,
-      minlength: 8,
     },
     role: {
       type: String,
       enum: Object.values(UserRole),
       default: UserRole.USER,
     },
-    status: {
+    avatar: {
       type: String,
-      enum: Object.values(UserStatus),
-      default: UserStatus.ACTIVE,
+    },
+    bio: {
+      type: String,
+      maxlength: 500,
+    },
+    phone: {
+      type: String,
+    },
+    location: {
+      type: String,
+    },
+    timezone: {
+      type: String,
+    },
+    language: {
+      type: String,
+      default: "English",
     },
     isVerified: {
       type: Boolean,
       default: false,
     },
-    verificationToken: {
-      type: String,
-      sparse: true,
-    },
-    verificationTokenExpiry: {
-      type: Date,
-    },
-    resetPasswordToken: {
-      type: String,
-      sparse: true,
-    },
-    resetPasswordTokenExpiry: {
-      type: Date,
-    },
+    verificationToken: String,
+    verificationTokenExpiry: Date,
+    resetPasswordToken: String,
+    resetPasswordTokenExpiry: Date,
     mfaEnabled: {
       type: Boolean,
       default: false,
     },
-    mfaSecret: {
-      type: String,
-    },
-    avatar: {
-      type: String,
-    },
-    lastLoginAt: {
-      type: Date,
+    mfaSecret: String,
+    tempMfaCode: String,
+    tempMfaCodeExpiry: Date,
+    preferences: {
+      theme: {
+        type: String,
+        enum: ["light", "dark", "system"],
+        default: "system",
+      },
+      emailNotifications: {
+        type: Boolean,
+        default: true,
+      },
+      pushNotifications: {
+        type: Boolean,
+        default: true,
+      },
     },
   },
   {
     timestamps: true,
-    toJSON: {
-      transform: (doc, ret) => {
-        delete ret.password
-        delete ret.mfaSecret
-        delete ret.verificationToken
-        delete ret.resetPasswordToken
-        return ret
-      },
-    },
-  },
-)
+  }
+);
 
-// Indexes
-UserSchema.index({ email: 1 })
-UserSchema.index({ verificationToken: 1 })
-UserSchema.index({ resetPasswordToken: 1 })
+userSchema.index({ email: 1 });
+userSchema.index({ verificationToken: 1 });
+userSchema.index({ resetPasswordToken: 1 });
 
-export const User = mongoose.models.User || mongoose.model<IUser>("User", UserSchema)
+export const User =
+  mongoose.models.User || mongoose.model<IUser>("User", userSchema);

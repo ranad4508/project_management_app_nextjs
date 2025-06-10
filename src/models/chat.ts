@@ -1,64 +1,68 @@
-import mongoose, { Schema, type Document } from "mongoose"
+import mongoose, { Schema, type Document } from "mongoose";
+import type {
+  ChatRoomType,
+  MessageType,
+  ReactionType,
+  MessageAttachment,
+  MessageEncryptionData,
+} from "@/src/types/chat.types";
 
 export interface IChatRoom extends Document {
-  workspace: mongoose.Types.ObjectId
-  name: string
-  description?: string
-  type: "direct" | "group" | "workspace"
-  participants: mongoose.Types.ObjectId[]
-  admins: mongoose.Types.ObjectId[]
-  isPrivate: boolean
-  lastMessage?: mongoose.Types.ObjectId
-  lastActivity: Date
-  createdBy: mongoose.Types.ObjectId
-  createdAt: Date
-  updatedAt: Date
+  workspace: mongoose.Types.ObjectId;
+  name: string;
+  description?: string;
+  type: ChatRoomType;
+  participants: mongoose.Types.ObjectId[];
+  admins: mongoose.Types.ObjectId[];
+  isPrivate: boolean;
+  lastMessage?: mongoose.Types.ObjectId;
+  lastActivity: Date;
+  createdBy: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface IChatMessage extends Document {
-  room: mongoose.Types.ObjectId
-  sender: mongoose.Types.ObjectId
-  content: string // This will be encrypted
-  messageType: "text" | "file" | "image" | "system"
-  encryptionData: {
-    iv: string
-    tag: string
-    senderPublicKey: string
-  }
-  replyTo?: mongoose.Types.ObjectId
-  mentions: mongoose.Types.ObjectId[]
-  attachments: {
-    name: string
-    url: string
-    type: string
-    size: number
-  }[]
-  isEdited: boolean
-  editedAt?: Date
-  deletedAt?: Date
+  room: mongoose.Types.ObjectId;
+  sender: mongoose.Types.ObjectId;
+  content: string; // This will be encrypted
+  messageType: MessageType;
+  encryptionData: MessageEncryptionData;
+  replyTo?: mongoose.Types.ObjectId;
+  mentions: mongoose.Types.ObjectId[];
+  attachments: MessageAttachment[];
+  reactions: {
+    user: mongoose.Types.ObjectId;
+    type: ReactionType;
+    emoji?: string;
+    createdAt: Date;
+  }[];
+  isEdited: boolean;
+  editedAt?: Date;
+  deletedAt?: Date;
   readBy: {
-    user: mongoose.Types.ObjectId
-    readAt: Date
-  }[]
-  createdAt: Date
-  updatedAt: Date
+    user: mongoose.Types.ObjectId;
+    readAt: Date;
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface IUserKeyPair extends Document {
-  user: mongoose.Types.ObjectId
-  publicKey: string
-  privateKeyEncrypted: string // Encrypted with user's password
-  keyVersion: number
-  createdAt: Date
-  expiresAt: Date
+  user: mongoose.Types.ObjectId;
+  publicKey: string;
+  privateKeyEncrypted: string; // Encrypted with user's password
+  keyVersion: number;
+  createdAt: Date;
+  expiresAt: Date;
 }
 
 export interface IChatRoomKey extends Document {
-  room: mongoose.Types.ObjectId
-  user: mongoose.Types.ObjectId
-  encryptedRoomKey: string // Room key encrypted with user's public key
-  keyVersion: number
-  createdAt: Date
+  room: mongoose.Types.ObjectId;
+  user: mongoose.Types.ObjectId;
+  encryptedRoomKey: string; // Room key encrypted with user's public key
+  keyVersion: number;
+  createdAt: Date;
 }
 
 const ChatRoomSchema: Schema = new Schema(
@@ -113,8 +117,8 @@ const ChatRoomSchema: Schema = new Schema(
       required: true,
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 const ChatMessageSchema: Schema = new Schema(
   {
@@ -181,6 +185,37 @@ const ChatMessageSchema: Schema = new Schema(
         },
       },
     ],
+    reactions: [
+      {
+        user: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        type: {
+          type: String,
+          enum: [
+            "like",
+            "love",
+            "laugh",
+            "wow",
+            "sad",
+            "angry",
+            "thumbsup",
+            "thumbsdown",
+            "custom",
+          ],
+          required: true,
+        },
+        emoji: {
+          type: String,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     isEdited: {
       type: Boolean,
       default: false,
@@ -204,8 +239,8 @@ const ChatMessageSchema: Schema = new Schema(
       },
     ],
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 const UserKeyPairSchema: Schema = new Schema(
   {
@@ -232,8 +267,8 @@ const UserKeyPairSchema: Schema = new Schema(
       required: true,
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 const ChatRoomKeySchema: Schema = new Schema(
   {
@@ -256,37 +291,49 @@ const ChatRoomKeySchema: Schema = new Schema(
       default: 1,
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 // Indexes
-ChatRoomSchema.index({ workspace: 1 })
-ChatRoomSchema.index({ participants: 1 })
-ChatRoomSchema.index({ type: 1 })
-ChatRoomSchema.index({ lastActivity: -1 })
+ChatRoomSchema.index({ workspace: 1 });
+ChatRoomSchema.index({ participants: 1 });
+ChatRoomSchema.index({ type: 1 });
+ChatRoomSchema.index({ lastActivity: -1 });
 
-ChatMessageSchema.index({ room: 1, createdAt: -1 })
-ChatMessageSchema.index({ sender: 1 })
-ChatMessageSchema.index({ mentions: 1 })
+ChatMessageSchema.index({ room: 1, createdAt: -1 });
+ChatMessageSchema.index({ sender: 1 });
+ChatMessageSchema.index({ mentions: 1 });
 
-UserKeyPairSchema.index({ user: 1 })
-UserKeyPairSchema.index({ expiresAt: 1 })
+UserKeyPairSchema.index({ user: 1 });
+UserKeyPairSchema.index({ expiresAt: 1 });
 
-ChatRoomKeySchema.index({ room: 1, user: 1 }, { unique: true })
+ChatRoomKeySchema.index({ room: 1, user: 1 }, { unique: true });
 
 // Methods
 ChatRoomSchema.methods.isParticipant = function (userId: string): boolean {
-  return this.participants.some((participantId: mongoose.Types.ObjectId) => participantId.toString() === userId)
-}
+  return this.participants.some(
+    (participantId: mongoose.Types.ObjectId) =>
+      participantId.toString() === userId
+  );
+};
 
 ChatRoomSchema.methods.isAdmin = function (userId: string): boolean {
   return (
-    this.admins.some((adminId: mongoose.Types.ObjectId) => adminId.toString() === userId) ||
-    this.createdBy.toString() === userId
-  )
-}
+    this.admins.some(
+      (adminId: mongoose.Types.ObjectId) => adminId.toString() === userId
+    ) || this.createdBy.toString() === userId
+  );
+};
 
-export const ChatRoom = mongoose.models.ChatRoom || mongoose.model<IChatRoom>("ChatRoom", ChatRoomSchema)
-export const ChatMessage = mongoose.models.ChatMessage || mongoose.model<IChatMessage>("ChatMessage", ChatMessageSchema)
-export const UserKeyPair = mongoose.models.UserKeyPair || mongoose.model<IUserKeyPair>("UserKeyPair", UserKeyPairSchema)
-export const ChatRoomKey = mongoose.models.ChatRoomKey || mongoose.model<IChatRoomKey>("ChatRoomKey", ChatRoomKeySchema)
+export const ChatRoom =
+  mongoose.models.ChatRoom ||
+  mongoose.model<IChatRoom>("ChatRoom", ChatRoomSchema);
+export const ChatMessage =
+  mongoose.models.ChatMessage ||
+  mongoose.model<IChatMessage>("ChatMessage", ChatMessageSchema);
+export const UserKeyPair =
+  mongoose.models.UserKeyPair ||
+  mongoose.model<IUserKeyPair>("UserKeyPair", UserKeyPairSchema);
+export const ChatRoomKey =
+  mongoose.models.ChatRoomKey ||
+  mongoose.model<IChatRoomKey>("ChatRoomKey", ChatRoomKeySchema);
