@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { User } from "@/src/models/user";
 import Database from "@/src/config/database";
-import { CryptoUtils } from "@/src/utils/crypto.utils";
+import { EncryptionUtils } from "@/src/utils/crypto.utils";
 import { EmailService } from "@/src/services/email.service";
 import speakeasy from "speakeasy";
 import QRCode from "qrcode";
@@ -45,7 +45,7 @@ export async function POST() {
 
     // Send MFA code via email
     const emailService = new EmailService();
-    const mfaCode = CryptoUtils.generateMfaCode();
+    const mfaCode = EncryptionUtils.generateMfaCode();
 
     // Store the code temporarily for verification (in production, use Redis or similar)
     user.tempMfaCode = mfaCode;

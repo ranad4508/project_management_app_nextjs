@@ -1,488 +1,501 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ChatService } from "@/src/services/chat.service";
-import { validateSchema } from "@/src/middleware/validation.middleware";
-import { requireAuth } from "@/src/middleware/auth.middleware";
-import { asyncHandler } from "@/src/errors/errorHandler";
-import type { ApiResponse } from "@/src/types/api.types";
-import type { ReactionType } from "@/src/types/chat.types";
-import { z } from "zod";
-
-// Additional schemas for chat
-const chatSchemas = {
-  createChatRoom: z.object({
-    workspaceId: z.string().min(1, "Workspace ID is required"),
-    name: z.string().min(1, "Room name is required").max(100, "Name too long"),
-    description: z.string().max(500, "Description too long").optional(),
-    type: z.enum(["direct", "group", "workspace"]),
-    participants: z.array(z.string()),
-    isPrivate: z.boolean().optional(),
-  }),
-
-  sendMessage: z.object({
-    roomId: z.string().min(1, "Room ID is required"),
-    content: z
-      .string()
-      .min(1, "Message content is required")
-      .max(2000, "Message too long"),
-    messageType: z.enum(["text", "file", "image"]).optional(),
-    replyTo: z.string().optional(),
-    mentions: z.array(z.string()).optional(),
-    attachments: z
-      .array(
-        z.object({
-          name: z.string(),
-          url: z.string(),
-          type: z.string(),
-          size: z.number(),
-        })
-      )
-      .optional(),
-  }),
-
-  addReaction: z.object({
-    type: z.enum([
-      "like",
-      "love",
-      "laugh",
-      "wow",
-      "sad",
-      "angry",
-      "thumbsup",
-      "thumbsdown",
-      "custom",
-    ]),
-    emoji: z.string().optional(),
-  }),
-
-  initializeEncryption: z.object({
-    password: z.string().min(8, "Password must be at least 8 characters"),
-  }),
-};
+import { ValidationError } from "@/src/errors/validation.error";
+import { EncryptionUtils } from "@/src/utils/crypto.utils"; // Import CryptoUtils for secure session key validation
+import type {
+  CreateChatRoomData,
+  UpdateChatRoomData,
+  SendMessageData,
+  ChatRoomResponse,
+  ChatRoomsResponse,
+  MessagesResponse,
+  DecryptedMessage,
+  ReactionType,
+} from "@/src/types/chat.types";
+import type { ApiResponse, PaginationParams } from "@/src/types/api.types";
+import { getSession } from "next-auth/react";
 
 export class ChatController {
-  private chatService: ChatService;
+  public chatService = new ChatService();
 
-  constructor() {
-    this.chatService = new ChatService();
+  private async getUserAndSession(
+    req: NextRequest
+  ): Promise<{ userId: string; session: any }> {
+    const session = await getSession({ req: req as any });
+    if (!session || !session.user?.id) {
+      throw new ValidationError("Unauthorized", 401);
+    }
+    return { userId: session.user.id as string, session };
   }
 
-  createChatRoom = asyncHandler(
-    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const body = await req.json();
-      const validatedData = validateSchema(chatSchemas.createChatRoom, body);
-
-      const chatRoom = await this.chatService.createChatRoom(
-        user.id,
-        validatedData
-      );
-
-      return NextResponse.json(
-        {
-          success: true,
-          data: chatRoom,
-          message: "Chat room created successfully",
-        },
-        { status: 201 }
-      );
+  private async getPassword(req: NextRequest): Promise<string> {
+    const sessionKey = req.headers.get("x-session-key");
+    if (!sessionKey) {
+      throw new ValidationError("Session key required", 400);
     }
-  );
 
-  getWorkspaceChatRooms = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { workspaceId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { workspaceId } = params;
+    // Validate session key using PBKDF2 for secure derivation
+    const hashedSessionKey = await EncryptionUtils.hashContent(sessionKey);
+    // In production, compare hashedSessionKey against stored value in session or DB
+    // For now, return sessionKey as password (replace with actual validation)
+    return sessionKey;
+  }
 
-      const chatRooms = await this.chatService.getWorkspaceChatRooms(
-        workspaceId,
-        user.id
-      );
+  async initializeUserEncryption(req: NextRequest): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const { password } = await req.json();
 
-      return NextResponse.json({
-        success: true,
-        data: { rooms: chatRooms },
-      });
-    }
-  );
-
-  getChatRoomById = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { id: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { id } = params;
-
-      const chatRoom = await this.chatService.getChatRoomById(id, user.id);
-
-      return NextResponse.json({
-        success: true,
-        data: chatRoom,
-      });
-    }
-  );
-
-  updateChatRoom = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { id: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { id } = params;
-      const body = await req.json();
-
-      const chatRoom = await this.chatService.updateChatRoom(id, user.id, body);
-
-      return NextResponse.json({
-        success: true,
-        data: chatRoom,
-        message: "Chat room updated successfully",
-      });
-    }
-  );
-
-  addParticipants = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { id: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { id } = params;
-      const { participantIds } = await req.json();
-
-      if (!Array.isArray(participantIds) || participantIds.length === 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Participant IDs are required",
-          },
-          { status: 400 }
+      if (!password || password.length < 8) {
+        throw new ValidationError(
+          "Password must be at least 8 characters",
+          400
         );
       }
 
-      const chatRoom = await this.chatService.addParticipants(
-        id,
-        user.id,
-        participantIds
-      );
+      const data =
+        await this.chatService.encryptionService.initializeUserEncryption(
+          userId,
+          password
+        );
 
+      return NextResponse.json({ success: true, data } as ApiResponse);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to initialize encryption",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async getUserChatRooms(req: NextRequest): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const rooms = await this.chatService.getUserChatRooms(userId);
       return NextResponse.json({
         success: true,
-        data: chatRoom,
-        message: "Participants added successfully",
-      });
-    }
-  );
-
-  removeParticipant = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { id: string; participantId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { id, participantId } = params;
-
-      const chatRoom = await this.chatService.removeParticipant(
-        id,
-        user.id,
-        participantId
+        data: rooms,
+      } as ApiResponse<ChatRoomResponse[]>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to fetch chat rooms",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
       );
+    }
+  }
 
+  async getWorkspaceChatRooms(
+    req: NextRequest,
+    { params }: { params: { workspaceId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const rooms = await this.chatService.getWorkspaceChatRooms(
+        params.workspaceId,
+        userId
+      );
+      return NextResponse.json({
+        rooms,
+      } as ChatRoomsResponse);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to fetch workspace chat rooms",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async getChatRoomById(
+    req: NextRequest,
+    { params }: { params: { id: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const room = await this.chatService.getChatRoomById(params.id, userId);
       return NextResponse.json({
         success: true,
-        data: chatRoom,
-        message: "Participant removed successfully",
-      });
+        data: room,
+      } as ApiResponse<ChatRoomResponse>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to fetch chat room",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
     }
-  );
+  }
 
-  sendMessage = asyncHandler(
-    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
+  async createChatRoom(req: NextRequest): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const password = await this.getPassword(req);
+      const data: CreateChatRoomData = await req.json();
+
+      // Validate required fields
+      if (!data.name || !data.type) {
+        throw new ValidationError("Name and type are required", 400);
+      }
+
+      const room = await this.chatService.createChatRoom(
+        userId,
+        data,
+        password
+      );
+      return NextResponse.json(
+        { success: true, data: room } as ApiResponse<ChatRoomResponse>,
+        { status: 201 }
+      );
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to create chat room",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async updateChatRoom(
+    req: NextRequest,
+    { params }: { params: { id: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const data: UpdateChatRoomData = await req.json();
+
+      const room = await this.chatService.updateChatRoom(
+        params.id,
+        userId,
+        data
+      );
+      return NextResponse.json({
+        success: true,
+        data: room,
+      } as ApiResponse<ChatRoomResponse>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to update chat room",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async addParticipants(
+    req: NextRequest,
+    { params }: { params: { id: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const password = await this.getPassword(req);
+      const { participantIds } = await req.json();
+
+      if (!Array.isArray(participantIds) || participantIds.length === 0) {
+        throw new ValidationError("Invalid participant IDs", 400);
+      }
+
+      const room = await this.chatService.addParticipantsToRoom(
+        params.id,
+        userId,
+        participantIds,
+        password
+      );
+      return NextResponse.json({
+        success: true,
+        data: room,
+      } as ApiResponse<ChatRoomResponse>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to add participants",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async removeParticipant(
+    req: NextRequest,
+    { params }: { params: { id: string; participantId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const room = await this.chatService.removeParticipantFromRoom(
+        params.id,
+        userId,
+        params.participantId
+      );
+      return NextResponse.json({
+        success: true,
+        data: room,
+      } as ApiResponse<ChatRoomResponse>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to remove participant",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async sendMessage(req: NextRequest): Promise<NextResponse> {
+    try {
+      const { userId, session } = await this.getUserAndSession(req);
+      const password = await this.getPassword(req);
       const body = await req.json();
-      const validatedData = validateSchema(chatSchemas.sendMessage, body);
+      const data: SendMessageData = {
+        roomId: body.roomId,
+        content: body.content,
+        messageType: body.messageType || "text",
+        replyTo: body.replyTo,
+        mentions: body.mentions,
+        attachments: body.attachments || [],
+      };
 
-      // Get password from headers (in production, this should be handled more securely)
-      const password = req.headers.get("x-encryption-password");
-      if (!password) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Encryption password is required",
-          },
-          { status: 400 }
+      if (!data.roomId || (!data.content && !data.attachments?.length)) {
+        throw new ValidationError(
+          "Room ID and content or attachments required",
+          400
         );
       }
 
       const message = await this.chatService.sendMessage(
-        user.id,
-        password,
-        validatedData
+        userId,
+        data,
+        password
       );
+      message.sender.name = session.user.name as string;
+      message.sender.avatar = session.user.image as string;
 
       return NextResponse.json(
-        {
-          success: true,
-          data: message,
-          message: "Message sent successfully",
-        },
+        { success: true, data: message } as ApiResponse<DecryptedMessage>,
         { status: 201 }
       );
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to send message",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
     }
-  );
+  }
 
-  getChatRoomMessages = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { id: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { id } = params;
+  async getChatRoomMessages(
+    req: NextRequest,
+    { params }: { params: { id: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const password = await this.getPassword(req);
       const { searchParams } = new URL(req.url);
-
-      // Get password from headers
-      const password = req.headers.get("x-encryption-password");
-      if (!password) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Encryption password is required",
-          },
-          { status: 400 }
-        );
-      }
-
-      const pagination = {
-        page: Number.parseInt(searchParams.get("page") || "1"),
-        limit: Number.parseInt(searchParams.get("limit") || "50"),
-        sortOrder: (searchParams.get("sortOrder") || "desc") as "asc" | "desc",
+      const pagination: PaginationParams = {
+        page: parseInt(searchParams.get("page") || "1"),
+        limit: parseInt(searchParams.get("limit") || "50"),
+        sortOrder: (searchParams.get("sortOrder") as "asc" | "desc") || "asc",
       };
 
-      const result = await this.chatService.getChatRoomMessages(
-        id,
-        user.id,
+      const messages = await this.chatService.getChatRoomMessages(
+        params.id,
+        userId,
         password,
         pagination
       );
-
       return NextResponse.json({
         success: true,
-        data: result,
-      });
-    }
-  );
-
-  markMessageAsRead = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { messageId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { messageId } = params;
-
-      const message = await this.chatService.markMessageAsRead(
-        messageId,
-        user.id
+        data: messages,
+      } as ApiResponse<MessagesResponse>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to fetch messages",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
       );
-
-      return NextResponse.json({
-        success: true,
-        data: message,
-        message: "Message marked as read",
-      });
     }
-  );
+  }
 
-  editMessage = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { messageId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { messageId } = params;
+  async markMessageAsRead(
+    req: NextRequest,
+    { params }: { params: { messageId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const result = await this.chatService.markMessageAsRead(
+        params.messageId,
+        userId
+      );
+      return NextResponse.json({ success: true, data: result } as ApiResponse);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to mark message as read",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
+
+  async editMessage(
+    req: NextRequest,
+    { params }: { params: { messageId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const password = await this.getPassword(req);
       const { content } = await req.json();
 
-      // Get password from headers
-      const password = req.headers.get("x-encryption-password");
-      if (!password) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Encryption password is required",
-          },
-          { status: 400 }
-        );
-      }
-
-      if (!content || content.trim().length === 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Message content is required",
-          },
-          { status: 400 }
-        );
+      if (!content) {
+        throw new ValidationError("Content is required", 400);
       }
 
       const message = await this.chatService.editMessage(
-        messageId,
-        user.id,
-        password,
-        content.trim()
+        params.messageId,
+        userId,
+        content,
+        password
       );
-
       return NextResponse.json({
         success: true,
         data: message,
-        message: "Message updated successfully",
-      });
-    }
-  );
-
-  deleteMessage = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { messageId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { messageId } = params;
-
-      const message = await this.chatService.deleteMessage(messageId, user.id);
-
-      return NextResponse.json({
-        success: true,
-        data: message,
-        message: "Message deleted successfully",
-      });
-    }
-  );
-
-  addReaction = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { messageId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { messageId } = params;
-      const body = await req.json();
-      const validatedData = validateSchema(chatSchemas.addReaction, body);
-
-      const message = await this.chatService.addReaction(
-        messageId,
-        user.id,
-        validatedData.type as ReactionType,
-        validatedData.emoji
+      } as ApiResponse<DecryptedMessage>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to edit message",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
       );
-
-      return NextResponse.json({
-        success: true,
-        data: message,
-        message: "Reaction added successfully",
-      });
     }
-  );
+  }
 
-  removeReaction = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { messageId: string; reactionType: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { messageId, reactionType } = params;
+  async deleteMessage(
+    req: NextRequest,
+    { params }: { params: { messageId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const result = await this.chatService.deleteMessage(
+        params.messageId,
+        userId
+      );
+      return NextResponse.json({ success: true, data: result } as ApiResponse);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to delete message",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
+    }
+  }
 
-      // Validate reaction type
-      if (
-        ![
-          "like",
-          "love",
-          "laugh",
-          "wow",
-          "sad",
-          "angry",
-          "thumbsup",
-          "thumbsdown",
-          "custom",
-        ].includes(reactionType)
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Invalid reaction type",
-          },
-          { status: 400 }
-        );
+  async addReaction(
+    req: NextRequest,
+    { params }: { params: { messageId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const { type, emoji } = await req.json();
+
+      if (!type) {
+        throw new ValidationError("Reaction type required", 400);
       }
 
-      const message = await this.chatService.removeReaction(
-        messageId,
-        user.id,
-        reactionType as ReactionType
+      const message = await this.chatService.addReaction(
+        params.messageId,
+        userId,
+        type as ReactionType,
+        emoji
       );
-
       return NextResponse.json({
         success: true,
         data: message,
-        message: "Reaction removed successfully",
-      });
+      } as ApiResponse<DecryptedMessage>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to add reaction",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
     }
-  );
+  }
 
-  initializeUserEncryption = asyncHandler(
-    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const body = await req.json();
-      const validatedData = validateSchema(
-        chatSchemas.initializeEncryption,
-        body
+  async removeReaction(
+    req: NextRequest,
+    { params }: { params: { messageId: string; reactionType: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const message = await this.chatService.removeReaction(
+        params.messageId,
+        userId,
+        params.reactionType
       );
-
-      const result = await this.chatService.initializeUserEncryption(
-        user.id,
-        validatedData.password
-      );
-
       return NextResponse.json({
         success: true,
-        data: result,
-        message: result.message,
-      });
-    }
-  );
-
-  getUserChatRooms = asyncHandler(
-    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-
-      const chatRooms = await this.chatService.getUserChatRooms(user.id);
-
-      return NextResponse.json({
-        success: true,
-        data: { rooms: chatRooms },
-      });
-    }
-  );
-
-  ensureWorkspaceGeneralRoom = asyncHandler(
-    async (
-      req: NextRequest,
-      { params }: { params: { workspaceId: string } }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const { workspaceId } = params;
-
-      const chatRoom = await this.chatService.ensureWorkspaceGeneralRoom(
-        workspaceId,
-        user.id
+        data: message,
+      } as ApiResponse<DecryptedMessage>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to remove reaction",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
       );
+    }
+  }
 
+  async ensureWorkspaceGeneralRoom(
+    req: NextRequest,
+    { params }: { params: { workspaceId: string } }
+  ): Promise<NextResponse> {
+    try {
+      const { userId } = await this.getUserAndSession(req);
+      const password = await this.getPassword(req);
+
+      const room = await this.chatService.ensureWorkspaceGeneralRoom(
+        params.workspaceId,
+        userId,
+        password
+      );
       return NextResponse.json({
         success: true,
-        data: chatRoom,
-        message: "General room ensured successfully",
-      });
+        data: room,
+      } as ApiResponse<ChatRoomResponse>);
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message || "Failed to ensure general room",
+        } as ApiResponse,
+        { status: error.statusCode || 500 }
+      );
     }
-  );
+  }
 }

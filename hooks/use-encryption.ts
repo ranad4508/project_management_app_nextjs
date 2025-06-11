@@ -1,110 +1,122 @@
-"use client";
-
 import { useState, useEffect, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import {
-  setEncryptionPassword,
-  clearEncryptionPassword,
-} from "@/src/store/slices/chatSlice";
-import type { RootState } from "@/src/store";
+import CryptoJS from "crypto-js";
 
-const ENCRYPTION_PASSWORD_KEY = "worksphere_encryption_password";
+interface EncryptionData {
+  hash: string;
+  timestamp: number;
+}
 
-export const useEncryption = () => {
-  const dispatch = useDispatch();
-  const encryptionPassword = useSelector(
-    (state: RootState) => state.chat.encryptionPassword
-  );
+export function useEncryption() {
+  const [isPasswordSet, setIsPasswordSet] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState<string | null>(null);
 
-  // Set isClient to true when component mounts (client-side only)
+  // Check if we're on the client side
   useEffect(() => {
     setIsClient(true);
+    checkExistingPassword();
   }, []);
 
-  // Set password in both Redux and sessionStorage
-  const setPassword = useCallback(
-    (password: string): boolean => {
-      if (!password || password.length < 8) {
-        console.error("Password must be at least 8 characters");
-        return false;
-      }
+  const checkExistingPassword = useCallback(() => {
+    if (typeof window === "undefined") return;
 
-      try {
-        if (typeof window !== "undefined" && window.sessionStorage) {
-          sessionStorage.setItem(ENCRYPTION_PASSWORD_KEY, password);
+    try {
+      const stored = localStorage.getItem("chat_encryption_data");
+      if (stored) {
+        const data: EncryptionData = JSON.parse(stored);
+        const now = Date.now();
+        const dayInMs = 24 * 60 * 60 * 1000;
+
+        // Check if password has expired (1 day)
+        if (now - data.timestamp > dayInMs) {
+          localStorage.removeItem("chat_encryption_data");
+          setIsPasswordSet(false);
+          setCurrentPassword(null);
+        } else {
+          setIsPasswordSet(true);
         }
-        dispatch(setEncryptionPassword(password));
+      } else {
+        setIsPasswordSet(false);
+      }
+    } catch (error) {
+      console.error("Error checking existing password:", error);
+      localStorage.removeItem("chat_encryption_data");
+      setIsPasswordSet(false);
+    }
+  }, []);
+
+  const setPassword = useCallback(
+    async (password: string): Promise<boolean> => {
+      try {
+        const hash = CryptoJS.SHA256(password).toString();
+        const encryptionData: EncryptionData = {
+          hash,
+          timestamp: Date.now(),
+        };
+
+        localStorage.setItem(
+          "chat_encryption_data",
+          JSON.stringify(encryptionData)
+        );
+        setCurrentPassword(password);
+        setIsPasswordSet(true);
         return true;
       } catch (error) {
-        console.error("Error setting encryption password:", error);
+        console.error("Error setting password:", error);
         return false;
       }
     },
-    [dispatch]
+    []
   );
 
-  // Get password from Redux or sessionStorage
-  const getPassword = useCallback((): string => {
-    if (encryptionPassword) {
-      return encryptionPassword;
-    }
+  const verifyPassword = useCallback(
+    async (password: string): Promise<boolean> => {
+      try {
+        const stored = localStorage.getItem("chat_encryption_data");
+        if (!stored) return false;
 
-    try {
-      if (typeof window !== "undefined" && window.sessionStorage) {
-        const storedPassword = sessionStorage.getItem(ENCRYPTION_PASSWORD_KEY);
-        if (storedPassword) {
-          dispatch(setEncryptionPassword(storedPassword));
-          return storedPassword;
-        }
-      }
-    } catch (error) {
-      console.error("Error getting encryption password:", error);
-    }
+        const data: EncryptionData = JSON.parse(stored);
+        const inputHash = CryptoJS.SHA256(password).toString();
 
-    return "";
-  }, [encryptionPassword, dispatch]);
-
-  // Check if password is set
-  const isPasswordSet = useCallback((): boolean => {
-    if (!isClient) return false;
-
-    if (encryptionPassword) {
-      return true;
-    }
-
-    try {
-      if (typeof window !== "undefined" && window.sessionStorage) {
-        const storedPassword = sessionStorage.getItem(ENCRYPTION_PASSWORD_KEY);
-        if (storedPassword) {
-          dispatch(setEncryptionPassword(storedPassword));
+        if (inputHash === data.hash) {
+          setCurrentPassword(password);
           return true;
         }
+        return false;
+      } catch (error) {
+        console.error("Error verifying password:", error);
+        return false;
       }
-    } catch (error) {
-      console.error("Error checking encryption password:", error);
-    }
+    },
+    []
+  );
 
-    return false;
-  }, [encryptionPassword, dispatch, isClient]);
-
-  // Clear password from both Redux and sessionStorage
   const clearPassword = useCallback(() => {
+    localStorage.removeItem("chat_encryption_data");
+    setIsPasswordSet(false);
+    setCurrentPassword(null);
+  }, []);
+
+  const getSessionKey = useCallback(async (): Promise<string | undefined> => {
+    if (!currentPassword) return undefined;
+
     try {
-      if (typeof window !== "undefined" && window.sessionStorage) {
-        sessionStorage.removeItem(ENCRYPTION_PASSWORD_KEY);
-      }
-      dispatch(clearEncryptionPassword());
+      // Generate a session key based on the current password
+      return CryptoJS.SHA256(currentPassword + Date.now().toString())
+        .toString()
+        .substring(0, 32);
     } catch (error) {
-      console.error("Error clearing encryption password:", error);
+      console.error("Error generating session key:", error);
+      return undefined;
     }
-  }, [dispatch]);
+  }, [currentPassword]);
 
   return {
-    setPassword,
-    getPassword,
     isPasswordSet,
-    clearPassword,
     isClient,
+    setPassword,
+    clearPassword,
+    verifyPassword,
+    getSessionKey,
   };
-};
+}

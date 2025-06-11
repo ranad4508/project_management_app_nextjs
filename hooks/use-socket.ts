@@ -9,13 +9,31 @@ import type {
 } from "@/src/types/chat.types";
 
 export function useSocket() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [isConnected, setIsConnected] = useState(false);
   const [joinedRooms, setJoinedRooms] = useState<string[]>([]);
   const socketRef = useRef<Socket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!session?.user) return;
+  const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    setIsConnected(false);
+    setJoinedRooms([]);
+  }, []);
+
+  const initializeSocket = useCallback(() => {
+    if (!session?.user || status !== "authenticated") return;
+    if (socketRef.current?.connected) return; // Already connected
+
+    cleanup(); // Clean up any existing connection
 
     // Initialize socket connection
     const socket = io(
@@ -27,6 +45,9 @@ export function useSocket() {
         reconnectionDelay: 1000,
         autoConnect: true,
         transports: ["websocket", "polling"],
+        query: {
+          userId: session.user.id,
+        },
       }
     );
 
@@ -34,11 +55,28 @@ export function useSocket() {
     socket.on("connect", () => {
       console.log("Socket connected");
       setIsConnected(true);
+
+      // Clear any pending reconnection attempts
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     });
 
-    socket.on("disconnect", () => {
-      console.log("Socket disconnected");
+    socket.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
       setIsConnected(false);
+      setJoinedRooms([]);
+
+      // Attempt to reconnect if disconnection wasn't intentional
+      if (reason === "io server disconnect") {
+        // Server disconnected, attempt to reconnect after delay
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (session?.user && status === "authenticated") {
+            socket.connect();
+          }
+        }, 2000);
+      }
     });
 
     socket.on("rooms:joined", (rooms: string[]) => {
@@ -49,22 +87,47 @@ export function useSocket() {
     socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err);
       setIsConnected(false);
+
+      // Retry connection after delay if user is still authenticated
+      if (session?.user && status === "authenticated") {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          socket.connect();
+        }, 3000);
+      }
+    });
+
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("Socket reconnected after", attemptNumber, "attempts");
+      setIsConnected(true);
+    });
+
+    socket.on("reconnect_error", (err) => {
+      console.error("Socket reconnection error:", err);
     });
 
     socketRef.current = socket;
+  }, [session, status, cleanup]);
 
-    // Cleanup on unmount
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [session]);
+  useEffect(() => {
+    if (status === "loading") return; // Wait for session to load
+
+    if (status === "authenticated" && session?.user) {
+      initializeSocket();
+    } else {
+      cleanup();
+    }
+
+    // Cleanup on unmount or when dependencies change
+    return cleanup;
+  }, [session, status, initializeSocket, cleanup]);
 
   // Send a message
   const sendMessage = useCallback(
     (payload: SocketMessagePayload) => {
-      if (socketRef.current && isConnected) {
+      if (socketRef.current?.connected && isConnected) {
         socketRef.current.emit("message:send", payload);
+      } else {
+        console.warn("Cannot send message: Socket not connected");
       }
     },
     [isConnected]
@@ -73,7 +136,7 @@ export function useSocket() {
   // Start typing indicator
   const startTyping = useCallback(
     (roomId: string) => {
-      if (socketRef.current && isConnected && session?.user) {
+      if (socketRef.current?.connected && isConnected && session?.user) {
         socketRef.current.emit("typing:start", {
           roomId,
           userId: session.user.id,
@@ -88,7 +151,7 @@ export function useSocket() {
   // Stop typing indicator
   const stopTyping = useCallback(
     (roomId: string) => {
-      if (socketRef.current && isConnected && session?.user) {
+      if (socketRef.current?.connected && isConnected && session?.user) {
         socketRef.current.emit("typing:stop", {
           roomId,
           userId: session.user.id,
@@ -103,7 +166,7 @@ export function useSocket() {
   // Mark message as read
   const markMessageAsRead = useCallback(
     (roomId: string, messageId: string) => {
-      if (socketRef.current && isConnected && session?.user) {
+      if (socketRef.current?.connected && isConnected && session?.user) {
         socketRef.current.emit("message:read", {
           roomId,
           messageId,
@@ -117,8 +180,10 @@ export function useSocket() {
   // Send reaction
   const sendReaction = useCallback(
     (payload: SocketReactionPayload) => {
-      if (socketRef.current && isConnected) {
+      if (socketRef.current?.connected && isConnected) {
         socketRef.current.emit("message:reaction", payload);
+      } else {
+        console.warn("Cannot send reaction: Socket not connected");
       }
     },
     [isConnected]
@@ -127,8 +192,11 @@ export function useSocket() {
   // Join a room
   const joinRoom = useCallback(
     (roomId: string) => {
-      if (socketRef.current && isConnected) {
+      if (socketRef.current?.connected && isConnected) {
         socketRef.current.emit("room:join", roomId);
+        console.log("Joining room:", roomId);
+      } else {
+        console.warn("Cannot join room: Socket not connected");
       }
     },
     [isConnected]
@@ -137,12 +205,21 @@ export function useSocket() {
   // Leave a room
   const leaveRoom = useCallback(
     (roomId: string) => {
-      if (socketRef.current && isConnected) {
+      if (socketRef.current?.connected && isConnected) {
         socketRef.current.emit("room:leave", roomId);
+        console.log("Leaving room:", roomId);
       }
     },
     [isConnected]
   );
+
+  // Manual reconnect function
+  const reconnect = useCallback(() => {
+    if (session?.user && status === "authenticated") {
+      cleanup();
+      setTimeout(initializeSocket, 100);
+    }
+  }, [session, status, cleanup, initializeSocket]);
 
   return {
     isConnected,
@@ -154,6 +231,7 @@ export function useSocket() {
     sendReaction,
     joinRoom,
     leaveRoom,
+    reconnect,
     socket: socketRef.current,
   };
 }

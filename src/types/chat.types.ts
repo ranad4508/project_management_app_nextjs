@@ -1,25 +1,76 @@
 import type { Types } from "mongoose";
 
-export type ChatRoomType = "direct" | "group" | "workspace";
-export type MessageType = "text" | "file" | "image" | "system";
-export type ReactionType =
-  | "like"
-  | "love"
-  | "laugh"
-  | "wow"
-  | "sad"
-  | "angry"
-  | "thumbsup"
-  | "thumbsdown"
-  | "custom";
+export interface MessageEncryptionData {
+  iv: string;
+  tag: string;
+  senderPublicKey: string;
+  salt?: any;
+}
 
-export interface CreateChatRoomData {
-  workspaceId: string;
+export interface EncryptedMessageData {
+  content: string;
+  encryptionData: MessageEncryptionData;
+}
+
+export interface DecryptedMessage {
+  id: string;
+  room: string;
+  sender: { id: string; name: string; avatar?: string };
+  content: string;
+  messageType: "text" | "attachment";
+  replyTo?: string;
+  mentions?: string[];
+  attachments?: {
+    fileName: string;
+    fileType: string;
+    fileUrl: string;
+    fileSize: number;
+  }[];
+  reactions: { user: string; type: string; emoji?: string }[];
+  isEdited: boolean;
+  readBy: { user: string; readAt: Date }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChatRoomResponse {
+  _id: string;
+  workspace?: string;
   name: string;
   description?: string;
-  type: ChatRoomType;
+  type: "group" | "workspace";
+  participants: {
+    user: { _id: string; name: string };
+    joinedAt: Date;
+  }[];
+  isPrivate: boolean;
+  createdBy: string;
+  lastMessage?: string;
+  unreadCount: { user: string; count: number }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChatRoomsResponse {
+  rooms: ChatRoomResponse[];
+}
+
+export interface MessagesResponse {
+  messages: DecryptedMessage[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+  };
+}
+
+export interface CreateChatRoomData {
+  workspaceId?: string;
+  name: string;
+  description?: string;
+  type: "group" | "workspace";
   participants: string[];
-  isPrivate?: boolean;
+  isPrivate: boolean;
 }
 
 export interface UpdateChatRoomData {
@@ -31,157 +82,20 @@ export interface UpdateChatRoomData {
 export interface SendMessageData {
   roomId: string;
   content: string;
-  messageType?: MessageType;
+  messageType: "text" | "attachment";
   replyTo?: string;
   mentions?: string[];
-  attachments?: MessageAttachment[];
-}
-
-export interface MessageAttachment {
-  name: string;
-  url: string;
-  type: string;
-  size: number;
-}
-
-export interface MessageReaction {
-  user: string | { id: string; name: string; email: string; avatar?: string };
-  type: ReactionType;
-  emoji?: string;
-  createdAt: Date;
-}
-
-export interface MessageEncryptionData {
-  iv: string;
-  tag: string;
-  senderPublicKey: string;
-}
-
-export interface EncryptedMessageData {
-  content: string;
-  encryptionData: MessageEncryptionData;
-}
-
-export interface MessageReadStatus {
-  user: string | Types.ObjectId;
-  readAt: Date;
-}
-
-export interface DecryptedMessage {
-  id: string;
-  content: string;
-  sender: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-  messageType: MessageType;
-  replyTo?: DecryptedMessagePreview | null;
-  mentions: Array<{
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  }>;
-  attachments: MessageAttachment[];
-  reactions: MessageReaction[];
-  isEdited: boolean;
-  editedAt?: Date;
-  deletedAt?: Date;
-  readBy: MessageReadStatus[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface DecryptedMessagePreview {
-  id: string;
-  content: string;
-  sender: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-  messageType: MessageType;
-  attachments: MessageAttachment[];
-  reactions: MessageReaction[];
-  isEdited: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ChatRoom {
-  _id: string;
-  name: string;
-  description?: string;
-  type: ChatRoomType;
-  workspace: string;
-  participants: Array<{
-    user: {
-      _id: string;
-      name: string;
-      email: string;
-      avatar?: string;
-    };
-    role: string;
-    joinedAt: Date;
-  }>;
-  isPrivate: boolean;
-  lastMessage?: DecryptedMessage;
-  unreadCount: number;
-  createdBy: {
-    _id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface ChatRoomResponse extends ChatRoom {}
-
-export interface ChatRoomsResponse {
-  rooms: ChatRoom[];
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-}
-
-export interface MessagesResponse {
-  messages: DecryptedMessage[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
+  attachments?: {
+    fileName: string;
+    fileType: string;
+    fileUrl: string;
+    fileSize: number;
+  }[];
 }
 
 export interface SocketMessagePayload {
   roomId: string;
-  message: {
-    content: string;
-    messageType?: MessageType;
-    replyTo?: string;
-    mentions?: string[];
-    attachments?: MessageAttachment[];
-  };
-}
-
-export interface SocketReactionPayload {
-  roomId: string;
-  messageId: string;
-  reactionType: ReactionType;
-  emoji?: string;
+  message: DecryptedMessage;
 }
 
 export interface SocketTypingPayload {
@@ -191,11 +105,15 @@ export interface SocketTypingPayload {
   isTyping: boolean;
 }
 
-export interface ChatRoomMember {
-  user: Types.ObjectId | string;
-  role: string;
-  joinedAt: Date;
+export interface SocketReactionPayload {
+  roomId: string;
+  messageId: string;
+  userId: string;
+  type: string;
+  emoji?: string;
 }
+
+export type ReactionType = "like" | "love" | "haha" | "wow" | "sad" | "angry";
 
 export interface UserKeyPairData {
   publicKey: string;
@@ -205,6 +123,8 @@ export interface UserKeyPairData {
 
 export interface ChatRoomKeyData {
   roomId: string;
+  user: string;
   encryptedRoomKey: string;
+  sharedSecret?: string;
   keyVersion: number;
 }

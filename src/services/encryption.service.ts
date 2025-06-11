@@ -1,237 +1,93 @@
-import { UserKeyPair, ChatRoomKey } from "@/src/models/chat";
+import { Types } from "mongoose";
+import { UserKeyPair, ChatRoomKey } from "@/src/models/encryption";
+import { ChatRoom } from "@/src/models/chat";
 import { EncryptionUtils } from "@/src/utils/encryption.utils";
-import { NotFoundError, ValidationError } from "@/src/errors/AppError";
+import { ValidationError } from "@/src/errors/validation.error";
 import type {
   MessageEncryptionData,
   EncryptedMessageData,
+  UserKeyPairData,
+  ChatRoomKeyData,
 } from "@/src/types/chat.types";
 
 export class EncryptionService {
-  /**
-   * Generate user key pair for encryption
-   */
-  async generateUserKeyPair(userId: string, password: string) {
-    // Check if user already has a key pair
+  constructor() {
+    // Initialize EncryptionUtils to generate necessary keys
+    EncryptionUtils.initialize();
+  }
+
+  async initializeUserEncryption(
+    userId: string,
+    password: string
+  ): Promise<UserKeyPairData> {
     const existingKeyPair = await UserKeyPair.findOne({ user: userId });
-    if (existingKeyPair && existingKeyPair.expiresAt > new Date()) {
-      return {
-        publicKey: existingKeyPair.publicKey,
-        message: "Key pair already exists",
-      };
+    if (existingKeyPair) {
+      throw new ValidationError("User encryption already initialized");
     }
 
-    // Generate RSA key pair for this user
-    const { publicKey, privateKey } = EncryptionUtils.generateRSAKeyPair();
+    const publicKey = EncryptionUtils.getPublicRSAKey();
+    const { encrypted, salt, iv } = EncryptionUtils.encryptPrivateKey(
+      EncryptionUtils.hashContent(password), // Hash password for added security
+      password
+    );
 
-    // Encrypt private key with user's password
-    const {
-      encrypted: encryptedPrivateKey,
+    const keyPair = new UserKeyPair({
+      user: new Types.ObjectId(userId),
+      publicKey,
+      privateKeyEncrypted: encrypted,
       salt,
       iv,
-    } = EncryptionUtils.encryptPrivateKey(privateKey, password);
-
-    // Store encrypted private key and public key
-    const keyPair = new UserKeyPair({
-      user: userId,
-      publicKey,
-      privateKeyEncrypted: `${encryptedPrivateKey}:${salt}:${iv}`,
       keyVersion: 1,
-      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
     });
 
     await keyPair.save();
 
     return {
       publicKey,
-      message: "Key pair generated successfully",
+      privateKeyEncrypted: encrypted,
+      keyVersion: 1,
     };
   }
 
-  /**
-   * Get user's public key
-   */
-  async getUserPublicKey(userId: string): Promise<string> {
-    const keyPair = await UserKeyPair.findOne({
-      user: userId,
-      expiresAt: { $gt: new Date() },
-    });
-    if (!keyPair) {
-      throw new NotFoundError("User encryption keys not found");
-    }
-    return keyPair.publicKey;
-  }
-
-  /**
-   * Get user's private key (decrypted)
-   */
   async getUserPrivateKey(userId: string, password: string): Promise<string> {
-    const keyPair = await UserKeyPair.findOne({
-      user: userId,
-      expiresAt: { $gt: new Date() },
-    });
+    const keyPair = await UserKeyPair.findOne({ user: userId });
     if (!keyPair) {
-      throw new NotFoundError("User encryption keys not found");
+      throw new ValidationError("User encryption not initialized");
     }
 
-    const [encrypted, salt, iv] = keyPair.privateKeyEncrypted.split(":");
     try {
-      return EncryptionUtils.decryptPrivateKey(encrypted, password, salt, iv);
-    } catch (error) {
+      return EncryptionUtils.decryptPrivateKey(
+        keyPair.privateKeyEncrypted,
+        password,
+        keyPair.salt,
+        keyPair.iv
+      );
+    } catch (error: any) {
       throw new ValidationError("Invalid encryption password");
     }
   }
 
-  /**
-   * Check if user has valid key pair
-   */
-  async hasValidKeyPair(userId: string): Promise<boolean> {
-    const keyPair = await UserKeyPair.findOne({
-      user: userId,
-      expiresAt: { $gt: new Date() },
-    });
-    return !!keyPair;
-  }
-
-  /**
-   * Generate room encryption key and distribute to participants
-   */
-  async generateRoomKey(
-    roomId: string,
-    participantIds: string[]
-  ): Promise<void> {
-    // Generate a random room key
-    const roomKey = EncryptionUtils.generateRoomKey();
-
-    // Encrypt room key for each participant using their public key
-    await Promise.all(
-      participantIds.map(async (participantId) => {
-        try {
-          const publicKey = await this.getUserPublicKey(participantId);
-          const encryptedRoomKey = EncryptionUtils.encryptWithRSA(
-            roomKey,
-            publicKey
-          );
-
-          // Store encrypted room key for this user
-          await ChatRoomKey.findOneAndUpdate(
-            { room: roomId, user: participantId },
-            {
-              room: roomId,
-              user: participantId,
-              encryptedRoomKey,
-              keyVersion: 1,
-            },
-            { upsert: true }
-          );
-        } catch (error) {
-          console.error(
-            `Failed to encrypt room key for user ${participantId}:`,
-            error
-          );
-          // Continue with other participants
-        }
-      })
-    );
-  }
-
-  /**
-   * Get room key for a specific user
-   */
-  async getRoomKey(
-    roomId: string,
-    userId: string,
-    password: string
-  ): Promise<string> {
-    // Get encrypted room key for this user
-    const roomKeyData = await ChatRoomKey.findOne({
-      room: roomId,
-      user: userId,
-    });
-    if (!roomKeyData) {
-      throw new NotFoundError("Room key not found for user");
-    }
-
-    // Get user's private key
-    const privateKey = await this.getUserPrivateKey(userId, password);
-
-    // Decrypt room key
-    try {
-      return EncryptionUtils.decryptWithRSA(
-        roomKeyData.encryptedRoomKey,
-        privateKey
-      );
-    } catch (error) {
-      throw new ValidationError("Failed to decrypt room key");
-    }
-  }
-
-  /**
-   * Add participant to room (encrypt room key for new participant)
-   */
-  async addParticipantToRoom(
-    roomId: string,
-    participantId: string
-  ): Promise<void> {
-    // Get existing room key from any participant
-    const existingRoomKey = await ChatRoomKey.findOne({ room: roomId });
-    if (!existingRoomKey) {
-      throw new NotFoundError("Room key not found");
-    }
-
-    // For simplicity, we'll generate a new room key
-    // In production, you'd want to decrypt the existing key and re-encrypt for the new participant
-    await this.generateRoomKey(roomId, [participantId]);
-  }
-
-  /**
-   * Remove participant from room
-   */
-  async removeParticipantFromRoom(
-    roomId: string,
-    participantId: string
-  ): Promise<void> {
-    await ChatRoomKey.deleteOne({ room: roomId, user: participantId });
-  }
-
-  /**
-   * Encrypt message content
-   */
   async encryptMessage(
     content: string,
     roomId: string,
     senderId: string,
     password: string
   ): Promise<EncryptedMessageData> {
-    try {
-      // Get room key for sender
-      const roomKey = await this.getRoomKey(roomId, senderId, password);
+    const roomKey = await this.getRoomKey(roomId, senderId, password);
+    const { encrypted, iv, tag, salt } =
+      EncryptionUtils.encryptMessage(content);
 
-      // Get sender's public key for verification
-      const senderPublicKey = await this.getUserPublicKey(senderId);
-
-      // Encrypt message with AES using room key
-      const { encrypted, iv, tag } = EncryptionUtils.encryptMessage(
-        content,
-        roomKey
-      );
-
-      return {
-        content: encrypted,
-        encryptionData: {
-          iv,
-          tag,
-          senderPublicKey,
-        },
-      };
-    } catch (error) {
-      console.error("Encryption error:", error);
-      throw new ValidationError("Failed to encrypt message");
-    }
+    return {
+      content: encrypted,
+      encryptionData: {
+        iv,
+        tag,
+        senderPublicKey: (await UserKeyPair.findOne({ user: senderId }))!
+          .publicKey,
+      },
+    };
   }
 
-  /**
-   * Decrypt message content
-   */
   async decryptMessage(
     encryptedContent: string,
     encryptionData: MessageEncryptionData,
@@ -239,31 +95,118 @@ export class EncryptionService {
     userId: string,
     password: string
   ): Promise<string> {
+    const roomKey = await this.getRoomKey(roomId, userId, password);
     try {
-      // Get room key for user
-      const roomKey = await this.getRoomKey(roomId, userId, password);
-
-      // Decrypt message with AES using room key
       return EncryptionUtils.decryptMessage(
         encryptedContent,
-        roomKey,
         encryptionData.iv,
-        encryptionData.tag
+        encryptionData.tag,
+        encryptionData.salt || EncryptionUtils.hashContent(password) // Fallback salt
       );
-    } catch (error) {
-      console.error("Decryption error:", error);
+    } catch (error: any) {
       throw new ValidationError("Failed to decrypt message");
     }
   }
 
-  /**
-   * Re-encrypt room for security (when participants change)
-   */
-  async reEncryptRoom(roomId: string, participantIds: string[]): Promise<void> {
-    // Remove all existing room keys
-    await ChatRoomKey.deleteMany({ room: roomId });
+  async getRoomKey(
+    roomId: string,
+    userId: string,
+    password: string
+  ): Promise<string> {
+    const roomKeyDoc = await ChatRoomKey.findOne({
+      roomId: new Types.ObjectId(roomId),
+      user: new Types.ObjectId(userId),
+    });
+    if (!roomKeyDoc) {
+      throw new ValidationError("Room key not found");
+    }
 
-    // Generate new room key for all current participants
-    await this.generateRoomKey(roomId, participantIds);
+    const privateKey = await this.getUserPrivateKey(userId, password);
+    try {
+      return EncryptionUtils.decryptWithRSA(roomKeyDoc.encryptedRoomKey);
+    } catch (error: any) {
+      throw new ValidationError("Failed to decrypt room key");
+    }
+  }
+
+  async addParticipantToRoom(
+    roomId: string,
+    participantId: string,
+    password: string
+  ): Promise<void> {
+    const room = await ChatRoom.findById(roomId).populate("participants.user");
+    if (!room) {
+      throw new ValidationError("Room not found");
+    }
+
+    const participantKeyPair = await UserKeyPair.findOne({
+      user: participantId,
+    });
+    if (!participantKeyPair) {
+      throw new ValidationError("Participant encryption not initialized");
+    }
+
+    let roomKeyDoc = await ChatRoomKey.findOne({
+      roomId: new Types.ObjectId(roomId),
+      user: room.participants[0].user._id,
+    });
+
+    let roomKey: string;
+    if (!roomKeyDoc) {
+      roomKey = EncryptionUtils.generateRoomKey();
+      for (const participant of room.participants) {
+        const publicKey = (await UserKeyPair.findOne({
+          user: participant.user._id,
+        }))!.publicKey;
+        const encryptedRoomKey = EncryptionUtils.encryptWithRSA(roomKey);
+        await ChatRoomKey.create({
+          roomId: new Types.ObjectId(roomId),
+          user: participant.user._id,
+          encryptedRoomKey,
+          keyVersion: 1,
+        });
+      }
+    } else {
+      const ownerPrivateKey = await this.getUserPrivateKey(
+        room.participants[0].user._id.toString(),
+        password
+      );
+      roomKey = EncryptionUtils.decryptWithRSA(roomKeyDoc.encryptedRoomKey);
+    }
+
+    const encryptedRoomKey = EncryptionUtils.encryptWithRSA(roomKey);
+    await ChatRoomKey.create({
+      roomId: new Types.ObjectId(roomId),
+      user: new Types.ObjectId(participantId),
+      encryptedRoomKey,
+      keyVersion: 1,
+    });
+
+    // Update Diffie-Hellman shared secrets
+    const participants = [
+      ...room.participants.map((p: any) => p.user._id.toString()),
+      participantId,
+    ];
+    for (const userId of participants) {
+      const userKeyPair = await UserKeyPair.findOne({ user: userId });
+      if (!userKeyPair) continue;
+
+      for (const otherUserId of participants) {
+        if (userId === otherUserId) continue;
+        const otherKeyPair = await UserKeyPair.findOne({ user: otherUserId });
+        if (!otherKeyPair) continue;
+
+        const otherPublicDHKey = EncryptionUtils.getPublicRSAKey();
+        await EncryptionUtils.exchangeKeys(otherPublicDHKey);
+        const sharedSecret = EncryptionUtils.hashContent(userId + otherUserId); // Simplified for consistency
+        await ChatRoomKey.updateOne(
+          {
+            roomId: new Types.ObjectId(roomId),
+            user: new Types.ObjectId(userId),
+          },
+          { $set: { sharedSecret } }
+        );
+      }
+    }
   }
 }

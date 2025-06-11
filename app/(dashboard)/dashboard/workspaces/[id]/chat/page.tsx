@@ -1,774 +1,284 @@
 "use client";
 
-import type React from "react";
-import { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useDispatch } from "react-redux";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
+import EncryptionSetup from "@/components/chat/EncryptionSetup";
+import RoomList from "@/components/chat/RoomList";
+import ChatInterface from "@/components/chat/ChatInterface";
+import { useEncryptionContext } from "@/components/chat/EncryptionContext";
 import {
-  Send,
-  Loader2,
-  Users,
-  Settings,
-  Smile,
-  Paperclip,
-  Plus,
-  Hash,
-  MessageCircle,
-  Lock,
-  Shield,
-} from "lucide-react";
-import {
+  useInitializeUserEncryptionMutation,
   useGetWorkspaceChatRoomsQuery,
-  useGetChatRoomMessagesQuery,
-  useSendMessageMutation,
   useCreateChatRoomMutation,
   useEnsureWorkspaceGeneralRoomMutation,
-  useInitializeUserEncryptionMutation,
 } from "@/src/store/api/chatApi";
-import { useSocket } from "@/hooks/use-socket";
-import { useEncryption } from "@/hooks/use-encryption";
-import { setSelectedRoomId } from "@/src/store/slices/chatSlice";
+import { Loader2 } from "lucide-react";
 
-export default function WorkspaceChatPage() {
-  const params = useParams();
-  const workspaceId = params.id as string;
-  const { data: session } = useSession();
-  const dispatch = useDispatch();
-  const [selectedRoomId, setSelectedRoomIdLocal] = useState<string | null>(
-    null
-  );
-  const [message, setMessage] = useState("");
+interface MainChatProps {
+  workspaceId: string;
+}
+
+export default function MainChat({ workspaceId }: MainChatProps) {
+  const { data: session, status } = useSession();
+  const { isPasswordSet, isClient, getSessionKey } = useEncryptionContext();
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
-  const [newRoomName, setNewRoomName] = useState("");
-  const [newRoomDescription, setNewRoomDescription] = useState("");
-  const [newRoomType, setNewRoomType] = useState<"group" | "workspace">(
-    "group"
-  );
-  const [encryptionPassword, setEncryptionPassword] = useState("");
-  const [retryCount, setRetryCount] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sessionKey, setSessionKey] = useState<string | undefined>();
+  const [showEncryptionSetup, setShowEncryptionSetup] = useState(false);
 
-  // Encryption hook
-  const { setPassword, isPasswordSet, getPassword, clearPassword, isClient } =
-    useEncryption();
-
-  // Socket connection
-  const socket = useSocket();
-
-  // Only run queries on client side and when encryption is set up
-  const shouldSkipQueries = !isClient || !isPasswordSet();
-
-  // Redux queries and mutations
-  const {
-    data: chatRoomsData,
-    isLoading: roomsLoading,
-    error: roomsError,
-    refetch: refetchRooms,
-  } = useGetWorkspaceChatRoomsQuery(workspaceId, {
-    skip: shouldSkipQueries,
-  });
-
-  // Set up polling if there's an error
-  useEffect(() => {
-    if (roomsError) {
-      const pollTimer = setInterval(() => {
-        refetchRooms();
-      }, 5000);
-      return () => clearInterval(pollTimer);
-    }
-  }, [roomsError, refetchRooms]);
-
-  const {
-    data: messagesData,
-    isLoading: messagesLoading,
-    error: messagesError,
-    refetch: refetchMessages,
-  } = useGetChatRoomMessagesQuery(
-    { roomId: selectedRoomId!, pagination: { limit: 50, sortOrder: "asc" } },
-    { skip: !selectedRoomId || shouldSkipQueries }
-  );
-
-  const [sendMessageMutation, { isLoading: isSending }] =
-    useSendMessageMutation();
-  const [createChatRoom, { isLoading: isCreatingRoom }] =
-    useCreateChatRoomMutation();
-  const [ensureGeneralRoom, { isLoading: isEnsuring }] =
-    useEnsureWorkspaceGeneralRoomMutation();
-  const [initializeEncryption, { isLoading: isInitializingEncryption }] =
+  const [initializeEncryption, { isLoading: isInitializing }] =
     useInitializeUserEncryptionMutation();
+  const [createRoom, { isLoading: isCreatingRoom }] =
+    useCreateChatRoomMutation();
+  const [ensureGeneralRoom, { isLoading: isEnsuring, data: generalRoomData }] =
+    useEnsureWorkspaceGeneralRoomMutation();
 
-  // Extract rooms array from response
-  const rooms = chatRoomsData?.rooms || [];
-
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messagesData?.messages]);
-
-  // Socket event handlers for encrypted messages
-  useEffect(() => {
-    if (!socket.socket || !selectedRoomId || !isPasswordSet() || !isClient)
-      return;
-
-    const handleNewMessage = (data: any) => {
-      if (data.roomId === selectedRoomId) {
-        refetchMessages();
-      }
-    };
-
-    const handleMessageRead = (data: any) => {
-      if (data.roomId === selectedRoomId) {
-        refetchMessages();
-      }
-    };
-
-    socket.socket.on("message:received", handleNewMessage);
-    socket.socket.on("message:read", handleMessageRead);
-
-    return () => {
-      socket.socket?.off("message:received", handleNewMessage);
-      socket.socket?.off("message:read", handleMessageRead);
-    };
-  }, [socket.socket, selectedRoomId, refetchMessages, isPasswordSet, isClient]);
-
-  // Join room when selected
-  useEffect(() => {
-    if (selectedRoomId && socket.socket && isClient) {
-      socket.joinRoom(selectedRoomId);
-      dispatch(setSelectedRoomId(selectedRoomId));
+    if (isClient && isPasswordSet && status === "authenticated") {
+      getSessionKey()
+        .then((key) => setSessionKey(key))
+        .catch(() => toast.error("Failed to fetch session key"));
+    } else if (isClient && !isPasswordSet && status === "authenticated") {
+      setShowEncryptionSetup(true);
     }
-  }, [selectedRoomId, socket, dispatch, isClient]);
+  }, [isClient, isPasswordSet, getSessionKey, status]);
+  console.log("Session Key:", sessionKey);
+  const shouldSkipQueries =
+    !isClient || !isPasswordSet || !sessionKey || status !== "authenticated";
 
-  // Auto-create general room on load
+  const {
+    data: roomsData,
+    isLoading: isLoadingRooms,
+    refetch: refetchRooms,
+  } = useGetWorkspaceChatRoomsQuery(
+    { workspaceId, sessionKey },
+    {
+      skip: shouldSkipQueries,
+      refetchOnMountOrArgChange: true,
+    }
+  );
+
+  // Auto-select general room
+  useEffect(() => {
+    if (
+      generalRoomData &&
+      !selectedRoomId &&
+      !isLoadingRooms &&
+      isPasswordSet &&
+      sessionKey
+    ) {
+      setSelectedRoomId(generalRoomData._id);
+      refetchRooms();
+    }
+  }, [
+    generalRoomData,
+    selectedRoomId,
+    isLoadingRooms,
+    isPasswordSet,
+    sessionKey,
+    refetchRooms,
+  ]);
+
+  // Ensure general room
   useEffect(() => {
     if (
       workspaceId &&
-      rooms.length === 0 &&
-      !roomsLoading &&
-      !roomsError &&
-      isPasswordSet() &&
-      isClient
+      roomsData?.rooms?.length === 0 &&
+      !isLoadingRooms &&
+      isPasswordSet &&
+      sessionKey &&
+      !isEnsuring
     ) {
-      handleEnsureGeneralRoom();
+      ensureGeneralRoom({ workspaceId, sessionKey })
+        .unwrap()
+        .then((room) => {
+          setSelectedRoomId(room._id);
+          refetchRooms();
+        })
+        .catch((error) =>
+          toast.error(error?.message || "Failed to ensure general room")
+        );
     }
   }, [
     workspaceId,
-    rooms.length,
-    roomsLoading,
-    roomsError,
+    roomsData,
+    isLoadingRooms,
     isPasswordSet,
-    isClient,
+    sessionKey,
+    isEnsuring,
+    ensureGeneralRoom,
+    refetchRooms,
   ]);
 
-  // Auto-retry on error
-  useEffect(() => {
-    if (roomsError && retryCount < 3) {
-      const timer = setTimeout(() => {
-        refetchRooms();
-        setRetryCount((prev) => prev + 1);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [roomsError, retryCount, refetchRooms]);
-
-  const handleSetupEncryption = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!encryptionPassword || encryptionPassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    if (!setPassword(encryptionPassword)) {
-      return;
-    }
-
+  const handleEncryptionSetup = async (password: string) => {
     try {
-      await initializeEncryption({ password: encryptionPassword }).unwrap();
-      setEncryptionPassword("");
-      toast.success("Encryption initialized successfully");
-
-      // Refetch rooms after encryption is set up
-      setTimeout(() => {
-        refetchRooms();
-      }, 500);
-    } catch (error: any) {
-      console.error("Error initializing encryption:", error);
-      toast.error(error?.message || "Failed to initialize encryption");
-      clearPassword();
-    }
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!message.trim() || !selectedRoomId || !isPasswordSet()) {
-      if (!isPasswordSet()) {
-        toast.error("Please set up encryption first");
-      }
-      return;
-    }
-
-    try {
-      await sendMessageMutation({
-        roomId: selectedRoomId,
-        content: message.trim(),
-        messageType: "text",
-      }).unwrap();
-
-      setMessage("");
-    } catch (error: any) {
-      console.error("Error sending message:", error);
-      toast.error(error?.message || "Failed to send message");
-    }
-  };
-
-  const handleCreateRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newRoomName.trim()) {
-      toast.error("Room name is required");
-      return;
-    }
-
-    if (!isPasswordSet()) {
-      toast.error("Please set up encryption first");
-      return;
-    }
-
-    try {
-      const room = await createChatRoom({
-        workspaceId,
-        name: newRoomName.trim(),
-        description: newRoomDescription.trim() || undefined,
-        type: newRoomType,
-        participants: [],
-        isPrivate: false,
-      }).unwrap();
-
-      setSelectedRoomIdLocal(room._id);
-      setShowCreateRoom(false);
-      setNewRoomName("");
-      setNewRoomDescription("");
-      setNewRoomType("group");
-      toast.success("Chat room created successfully");
-    } catch (error: any) {
-      console.error("Error creating room:", error);
-      toast.error(error?.message || "Failed to create chat room");
-    }
-  };
-
-  const handleEnsureGeneralRoom = async () => {
-    if (!isPasswordSet() || !isClient) return;
-
-    try {
-      const room = await ensureGeneralRoom(workspaceId).unwrap();
-      if (!selectedRoomId) {
-        setSelectedRoomIdLocal(room._id);
-      }
+      await initializeEncryption({ password, sessionKey }).unwrap();
+      const newSessionKey = await getSessionKey();
+      setSessionKey(newSessionKey);
+      setShowEncryptionSetup(false);
+      toast.success("Encryption setup completed successfully!");
       refetchRooms();
     } catch (error: any) {
-      console.error("Error ensuring general room:", error);
+      console.error("Encryption setup failed:", error);
+      toast.error(error?.message || "Failed to setup encryption");
     }
   };
 
-  // Show loading while client-side hydration happens
+  const handleCreateRoom = async (data: {
+    name: string;
+    description: string;
+    type: "group" | "workspace";
+  }) => {
+    if (!sessionKey) {
+      toast.error("Session not available. Please refresh the page.");
+      return;
+    }
+
+    try {
+      const result = await createRoom({
+        data: {
+          name: data.name.trim(),
+          description: data.description.trim() || undefined,
+          type: data.type,
+          participants: [],
+          isPrivate: false,
+        },
+        workspaceId,
+        sessionKey,
+      }).unwrap();
+
+      toast.success(`Room "${data.name}" created successfully!`);
+      setShowCreateRoom(false);
+      refetchRooms();
+      setSelectedRoomId(result._id);
+    } catch (error: any) {
+      console.error("Failed to create room:", error);
+      toast.error(error?.data?.error || "Failed to create room");
+    }
+  };
+
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+          <p className="text-sm text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-lg mb-4">Please log in to access chat</p>
+          <button
+            onClick={() => (window.location.href = "/api/auth/signin")}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!isClient) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+      <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-          <p className="text-muted-foreground">Loading chat...</p>
+          <p className="text-sm text-gray-600">Loading chat...</p>
         </div>
       </div>
     );
   }
 
-  // Show encryption setup if not initialized
-  if (!isPasswordSet()) {
+  if (showEncryptionSetup) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-              <Shield className="h-6 w-6 text-blue-600" />
-            </div>
-            <CardTitle>Set Up End-to-End Encryption</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Your messages will be encrypted with AES-256 and Diffie-Hellman
-              key exchange
-            </p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSetupEncryption} className="space-y-4">
-              <div>
-                <Label htmlFor="encryptionPassword">Encryption Password</Label>
-                <Input
-                  id="encryptionPassword"
-                  type="password"
-                  value={encryptionPassword}
-                  onChange={(e) => setEncryptionPassword(e.target.value)}
-                  placeholder="Enter a strong password (min 8 characters)"
-                  required
-                  minLength={8}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  This password will be used to encrypt and decrypt your
-                  messages. Keep it secure!
-                </p>
-              </div>
-              <Alert>
-                <Lock className="h-4 w-4" />
-                <AlertDescription>
-                  Your encryption password is never sent to our servers. Only
-                  you can decrypt your messages.
-                </AlertDescription>
-              </Alert>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isInitializingEncryption}
-              >
-                {isInitializingEncryption ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Initializing Encryption...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="mr-2 h-4 w-4" />
-                    Initialize Encryption
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+      <EncryptionSetup
+        isLoading={isInitializing}
+        onSubmit={handleEncryptionSetup}
+      />
     );
   }
 
-  if (roomsLoading || isEnsuring) {
+  if (isLoadingRooms && !roomsData) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-          <p className="text-muted-foreground">
-            Setting up encrypted chat rooms...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (roomsError) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <h3 className="text-lg font-medium mb-2">Error loading chat rooms</h3>
-          <p className="text-muted-foreground mb-4">
-            Failed to load chat rooms. Please try again.
-          </p>
-          <div className="space-y-2">
-            <Button onClick={() => refetchRooms()}>Retry</Button>
-            <p className="text-xs text-muted-foreground">
-              {retryCount > 0 ? `Retried ${retryCount} times` : ""}
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                clearPassword();
-                window.location.reload();
-              }}
-            >
-              Reset Encryption
-            </Button>
-          </div>
+          <p className="text-sm text-gray-600">Loading chat rooms...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
-      {/* Chat Rooms Sidebar */}
-      <Card className="w-80 flex flex-col">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-lg">Chat Rooms</CardTitle>
-              <Badge variant="outline" className="text-xs">
-                <Lock className="h-3 w-3 mr-1" />
-                E2E
-              </Badge>
-            </div>
-            <div className="flex gap-2">
-              <Dialog open={showCreateRoom} onOpenChange={setShowCreateRoom}>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create Encrypted Chat Room</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleCreateRoom} className="space-y-4">
-                    <div>
-                      <Label htmlFor="roomName">Room Name</Label>
-                      <Input
-                        id="roomName"
-                        value={newRoomName}
-                        onChange={(e) => setNewRoomName(e.target.value)}
-                        placeholder="Enter room name"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="roomDescription">
-                        Description (Optional)
-                      </Label>
-                      <Textarea
-                        id="roomDescription"
-                        value={newRoomDescription}
-                        onChange={(e) => setNewRoomDescription(e.target.value)}
-                        placeholder="Enter room description"
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="roomType">Room Type</Label>
-                      <Select
-                        value={newRoomType}
-                        onValueChange={(value: "group" | "workspace") =>
-                          setNewRoomType(value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="group">Group Chat</SelectItem>
-                          <SelectItem value="workspace">
-                            Workspace Channel
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Alert>
-                      <Lock className="h-4 w-4" />
-                      <AlertDescription>
-                        All messages in this room will be end-to-end encrypted.
-                      </AlertDescription>
-                    </Alert>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowCreateRoom(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" disabled={isCreatingRoom}>
-                        {isCreatingRoom ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          "Create Room"
-                        )}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-              <Button variant="ghost" size="sm">
-                <Settings className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 p-0">
-          <ScrollArea className="h-full">
-            <div className="p-3 space-y-2">
-              {rooms.length === 0 ? (
-                <div className="text-center py-8">
-                  <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground mb-4">
-                    No chat rooms yet
-                  </p>
-                  <Button
-                    onClick={handleEnsureGeneralRoom}
-                    size="sm"
-                    disabled={isEnsuring}
-                  >
-                    {isEnsuring ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Create General Room"
-                    )}
-                  </Button>
-                </div>
-              ) : (
-                rooms.map((room) => (
-                  <div
-                    key={room._id}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                      selectedRoomId === room._id
-                        ? "bg-blue-50 border border-blue-200"
-                        : "hover:bg-gray-50"
-                    }`}
-                    onClick={() => setSelectedRoomIdLocal(room._id)}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      {room.type === "workspace" ? (
-                        <Hash className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <MessageCircle className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <h4 className="font-medium flex-1">{room.name}</h4>
-                      <div className="flex items-center gap-1">
-                        <Lock className="h-3 w-3 text-green-600" />
-                        <Badge variant="outline" className="text-xs">
-                          {room.participants?.length || 0}
-                        </Badge>
-                      </div>
-                    </div>
-                    {room.description && (
-                      <p className="text-xs text-muted-foreground mb-1 truncate">
-                        {room.description}
-                      </p>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-
-      {/* Chat Messages Area */}
-      <Card className="flex-1 flex flex-col">
+    <div className="flex h-screen bg-gray-50">
+      <RoomList
+        rooms={roomsData?.rooms || []}
+        selectedRoomId={selectedRoomId || ""}
+        onSelectRoom={setSelectedRoomId}
+        onOpenCreateRoom={() => setShowCreateRoom(true)}
+        isCreatingRoom={isCreatingRoom}
+        onCreateRoomSubmit={handleCreateRoom}
+        showCreateRoom={showCreateRoom}
+        setShowCreateRoom={setShowCreateRoom}
+      />
+      <div className="flex-1">
         {selectedRoomId ? (
-          <>
-            {/* Chat Header */}
-            <CardHeader className="pb-3 border-b">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {rooms.find((r) => r._id === selectedRoomId)?.type ===
-                  "workspace" ? (
-                    <Hash className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <MessageCircle className="h-5 w-5 text-muted-foreground" />
-                  )}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">
-                        {rooms.find((r) => r._id === selectedRoomId)?.name ||
-                          "Chat Room"}
-                      </CardTitle>
-                      <Badge variant="outline" className="text-xs">
-                        <Lock className="h-3 w-3 mr-1" />
-                        Encrypted
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {rooms.find((r) => r._id === selectedRoomId)?.participants
-                        ?.length || 0}{" "}
-                      participants • End-to-end encrypted
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm">
-                    <Users className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-
-            {/* Messages Area */}
-            <CardContent className="flex-1 p-0">
-              <ScrollArea className="h-full">
-                <div className="p-4 space-y-4">
-                  {messagesLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="text-center">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                        <p className="text-sm text-muted-foreground">
-                          Decrypting messages...
-                        </p>
-                      </div>
-                    </div>
-                  ) : messagesError ? (
-                    <div className="text-center py-8">
-                      <h3 className="text-lg font-medium mb-2">
-                        Error loading messages
-                      </h3>
-                      <p className="text-muted-foreground mb-4">
-                        Failed to load messages. Please try again.
-                      </p>
-                      <Button onClick={() => refetchMessages()}>Retry</Button>
-                    </div>
-                  ) : messagesData?.messages &&
-                    messagesData.messages.length > 0 ? (
-                    messagesData.messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`flex gap-3 ${
-                          msg.sender.id === session?.user?.id
-                            ? "flex-row-reverse"
-                            : ""
-                        }`}
-                      >
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage
-                            src={msg.sender.avatar || "/placeholder.svg"}
-                          />
-                          <AvatarFallback>
-                            {msg.sender.name
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div
-                          className={`flex-1 max-w-xs ${
-                            msg.sender.id === session?.user?.id
-                              ? "text-right"
-                              : ""
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium">
-                              {msg.sender.name}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(msg.createdAt).toLocaleTimeString()}
-                            </span>
-                            <Lock className="h-3 w-3 text-green-600" />
-                          </div>
-                          <div
-                            className={`p-3 rounded-lg ${
-                              msg.sender.id === session?.user?.id
-                                ? "bg-blue-600 text-white"
-                                : "bg-gray-100"
-                            }`}
-                          >
-                            <p className="text-sm">{msg.content}</p>
-                            {msg.isEdited && (
-                              <p className="text-xs opacity-70 mt-1">
-                                (edited)
-                              </p>
-                            )}
-                          </div>
-                          {msg.reactions && msg.reactions.length > 0 && (
-                            <div className="flex gap-1 mt-1">
-                              {msg.reactions.map((reaction, index) => (
-                                <Badge
-                                  key={index}
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  {reaction.emoji || reaction.type}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                        <Lock className="h-6 w-6 text-green-600" />
-                      </div>
-                      <h3 className="text-lg font-medium mb-2">
-                        Secure Chat Room
-                      </h3>
-                      <p className="text-muted-foreground mb-2">
-                        This room is protected with end-to-end encryption.
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Start the conversation!
-                      </p>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
-            </CardContent>
-
-            {/* Message Input */}
-            <div className="p-4 border-t">
-              <form onSubmit={handleSendMessage} className="flex gap-2">
-                <Button type="button" variant="ghost" size="sm">
-                  <Paperclip className="h-4 w-4" />
-                </Button>
-                <Input
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Type an encrypted message..."
-                  className="flex-1"
-                />
-                <Button type="button" variant="ghost" size="sm">
-                  <Smile className="h-4 w-4" />
-                </Button>
-                <Button type="submit" disabled={isSending || !message.trim()}>
-                  {isSending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              </form>
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                <Lock className="h-3 w-3" />
-                Messages are end-to-end encrypted with AES-256
-              </p>
-            </div>
-          </>
+          <ChatInterface
+            roomId={selectedRoomId}
+            sessionKey={sessionKey}
+            workspaceId={workspaceId}
+          />
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                <MessageCircle className="h-6 w-6 text-blue-600" />
+              <div className="text-gray-400 mb-4">
+                <svg
+                  className="w-16 h-16 mx-auto"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
+                    clipRule="evenodd"
+                  />
+                </svg>
               </div>
-              <h3 className="text-lg font-medium mb-2">Select a chat room</h3>
-              <p className="text-muted-foreground">
-                Choose a room from the sidebar to start secure chatting
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Welcome to Chat
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {(roomsData?.rooms?.length ?? 0) > 0
+                  ? "Select a room to start chatting"
+                  : "Create your first room to get started"}
               </p>
+              {(!roomsData || roomsData.rooms.length === 0) && (
+                <button
+                  onClick={() => setShowCreateRoom(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={isCreatingRoom}
+                >
+                  {isCreatingRoom ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2 inline" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Room"
+                  )}
+                </button>
+              )}
             </div>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

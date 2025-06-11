@@ -21,7 +21,6 @@ export const POST = asyncHandler(
     { params }: { params: { workspaceId: string } }
   ): Promise<NextResponse> => {
     await Database.connect();
-    const body = await req.json();
-    return chatController.createChatRoom(req, { params, body });
+    return chatController.createChatRoom(req);
   }
 );

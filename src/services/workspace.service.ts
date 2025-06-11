@@ -4,7 +4,7 @@ import { Invitation } from "@/src/models/invitation";
 import { Project } from "@/src/models/project";
 import { Task } from "@/src/models/task";
 import { StringUtils } from "@/src/utils/string.utils";
-import { CryptoUtils } from "@/src/utils/crypto.utils";
+import { EncryptionUtils } from "@/src/utils/crypto.utils";
 import { DateUtils } from "@/src/utils/date.utils";
 import { EmailService } from "./email.service";
 import { NotificationService } from "./notification.service";
@@ -424,7 +424,7 @@ export class WorkspaceService {
     }
 
     // Create invitation
-    const token = CryptoUtils.generateToken();
+    const token = EncryptionUtils.generateToken();
     const expiresAt = DateUtils.addTime(new Date(), 7, "days");
 
     const invitation = new Invitation({

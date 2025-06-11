@@ -1,4 +1,4 @@
-// File: pages/api/chat/rooms/[id]/participants.ts
+// File: pages/api/chat/messages/[messageId]/reactions.ts
 import { ChatController } from "@/src/controllers/chat.controller";
 import Database from "@/src/config/database";
 
@@ -6,8 +6,8 @@ const chatController = new ChatController();
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { messageId: string } }
 ) {
   await Database.connect();
-  return chatController.addParticipants(req as any, { params });
+  return chatController.addReaction(req as any, { params });
 }

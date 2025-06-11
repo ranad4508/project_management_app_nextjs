@@ -111,8 +111,6 @@ const userSchema = new Schema<IUser>(
   }
 );
 
-// Only create indexes once using schema.index()
-userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ verificationToken: 1 });
 userSchema.index({ resetPasswordToken: 1 });
 

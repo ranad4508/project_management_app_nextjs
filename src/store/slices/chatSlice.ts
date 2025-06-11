@@ -1,30 +1,26 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import type { DecryptedMessage } from "@/src/types/chat.types";
 
 interface ChatState {
-  encryptionPassword: string | null;
   isEncryptionInitialized: boolean;
   selectedRoomId: string | null;
   onlineUsers: string[];
+  messages: Record<string, DecryptedMessage[]>;
 }
 
 const initialState: ChatState = {
-  encryptionPassword: null,
   isEncryptionInitialized: false,
   selectedRoomId: null,
   onlineUsers: [],
+  messages: {},
 };
 
 const chatSlice = createSlice({
   name: "chat",
   initialState,
   reducers: {
-    setEncryptionPassword: (state, action: PayloadAction<string>) => {
-      state.encryptionPassword = action.payload;
-      state.isEncryptionInitialized = true;
-    },
-    clearEncryptionPassword: (state) => {
-      state.encryptionPassword = null;
-      state.isEncryptionInitialized = false;
+    setEncryptionInitialized: (state, action: PayloadAction<boolean>) => {
+      state.isEncryptionInitialized = action.payload;
     },
     setSelectedRoomId: (state, action: PayloadAction<string | null>) => {
       state.selectedRoomId = action.payload;
@@ -42,16 +38,41 @@ const chatSlice = createSlice({
         (id) => id !== action.payload
       );
     },
+    appendMessage: (
+      state,
+      action: PayloadAction<{ roomId: string; message: DecryptedMessage }>
+    ) => {
+      const { roomId, message } = action.payload;
+      if (!state.messages[roomId]) {
+        state.messages[roomId] = [];
+      }
+      state.messages[roomId].push(message);
+    },
+    setMessages: (
+      state,
+      action: PayloadAction<{ roomId: string; messages: DecryptedMessage[] }>
+    ) => {
+      const { roomId, messages } = action.payload;
+      state.messages[roomId] = messages;
+    },
+    resetChatState: (state) => {
+      state.isEncryptionInitialized = false;
+      state.selectedRoomId = null;
+      state.onlineUsers = [];
+      state.messages = {};
+    },
   },
 });
 
 export const {
-  setEncryptionPassword,
-  clearEncryptionPassword,
+  setEncryptionInitialized,
   setSelectedRoomId,
   setOnlineUsers,
   addOnlineUser,
   removeOnlineUser,
+  appendMessage,
+  setMessages,
+  resetChatState,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;
