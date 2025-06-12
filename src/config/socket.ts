@@ -1,7 +1,7 @@
 import type { Server as HttpServer } from "http";
 import { Server as SocketServer, type Socket } from "socket.io";
 import { getSession } from "next-auth/react";
-import { ChatRoom } from "@/src/models/chat";
+import { ChatRoom } from "@/src/models/chat-message";
 import type {
   SocketMessagePayload,
   SocketTypingPayload,

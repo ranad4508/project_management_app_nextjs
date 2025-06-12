@@ -1,15 +1,20 @@
 "use client";
 
+import type React from "react";
+
+import { useState } from "react";
+import { useCreateRoomMutation } from "@/src/store/api/chatApi";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -17,161 +22,140 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Lock, Loader2, Plus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
+import { RoomType } from "@/src/types/chat.types";
 
 interface CreateRoomDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  isCreating: boolean;
-  onSubmit: (data: {
-    name: string;
-    description: string;
-    type: "group" | "workspace";
-  }) => Promise<void>;
-  showTrigger?: boolean; // Optional prop to show/hide the trigger button
+  workspaceId: string;
+  hasGeneralRoom?: boolean;
 }
 
-export default function CreateRoomDialog({
+export function CreateRoomDialog({
   open,
   onOpenChange,
-  isCreating,
-  onSubmit,
-  showTrigger = true,
+  workspaceId,
+  hasGeneralRoom = true,
 }: CreateRoomDialogProps) {
-  const [newRoomName, setNewRoomName] = useState("");
-  const [newRoomDescription, setNewRoomDescription] = useState("");
-  const [newRoomType, setNewRoomType] = useState<"group" | "workspace">(
-    "group"
-  );
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    type: RoomType.PRIVATE,
+    isEncrypted: true,
+  });
 
-  // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      resetForm();
-    }
-  }, [open]);
+  const [createRoom, { isLoading }] = useCreateRoomMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRoomName.trim()) return;
 
     try {
-      await onSubmit({
-        name: newRoomName.trim(),
-        description: newRoomDescription.trim(),
-        type: newRoomType,
+      await createRoom({
+        ...formData,
+        workspaceId,
+      }).unwrap();
+
+      // Reset form and close dialog
+      setFormData({
+        name: "",
+        description: "",
+        type: RoomType.PRIVATE,
+        isEncrypted: true,
       });
-      // Don't close dialog here - let parent component handle it
-      resetForm();
+      onOpenChange(false);
     } catch (error) {
-      // Error handling can be done by parent component
       console.error("Failed to create room:", error);
     }
   };
 
-  const handleCancel = () => {
-    resetForm();
-    onOpenChange(false);
-  };
-
-  const resetForm = () => {
-    setNewRoomName("");
-    setNewRoomDescription("");
-    setNewRoomType("group");
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {showTrigger && (
-        <DialogTrigger asChild>
-          <Button variant="ghost" size="sm">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </DialogTrigger>
-      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Encrypted Chat Room</DialogTitle>
+          <DialogTitle>Create New Room</DialogTitle>
         </DialogHeader>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="roomName" className="text-sm font-medium">
-              Room Name *
-            </label>
+            <Label htmlFor="name">Room Name</Label>
             <Input
-              id="roomName"
-              value={newRoomName}
-              onChange={(e) => setNewRoomName(e.target.value)}
+              id="name"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
               placeholder="Enter room name"
               required
-              disabled={isCreating}
-              maxLength={50}
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="roomDescription" className="text-sm font-medium">
-              Description (Optional)
-            </label>
+            <Label htmlFor="description">Description (Optional)</Label>
             <Textarea
-              id="roomDescription"
-              value={newRoomDescription}
-              onChange={(e) => setNewRoomDescription(e.target.value)}
+              id="description"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
               placeholder="Enter room description"
               rows={3}
-              disabled={isCreating}
-              maxLength={200}
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="roomType" className="text-sm font-medium">
-              Room Type
-            </label>
+            <Label htmlFor="type">Room Type</Label>
             <Select
-              value={newRoomType}
-              onValueChange={(value: "group" | "workspace") =>
-                setNewRoomType(value)
+              value={formData.type}
+              onValueChange={(value) =>
+                setFormData({ ...formData, type: value as RoomType })
               }
-              disabled={isCreating}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="group">Group Chat</SelectItem>
-                <SelectItem value="workspace">Workspace Channel</SelectItem>
+                <SelectItem value={RoomType.PRIVATE}>Private Room</SelectItem>
+                {!hasGeneralRoom && (
+                  <SelectItem value={RoomType.GENERAL}>General Room</SelectItem>
+                )}
+                {hasGeneralRoom && (
+                  <SelectItem value={RoomType.GENERAL} disabled>
+                    General Room (Already exists)
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
 
-          <Alert>
-            <Lock className="h-4 w-4" />
-            <AlertDescription>
-              All messages in this room will be end-to-end encrypted.
-            </AlertDescription>
-          </Alert>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="encrypted">End-to-End Encryption</Label>
+              <p className="text-sm text-muted-foreground">
+                Enable encryption for secure messaging
+              </p>
+            </div>
+            <Switch
+              id="encrypted"
+              checked={formData.isEncrypted}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, isEncrypted: checked })
+              }
+            />
+          </div>
 
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end space-x-2">
             <Button
               type="button"
               variant="outline"
-              onClick={handleCancel}
-              disabled={isCreating}
+              onClick={() => onOpenChange(false)}
+              disabled={isLoading}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isCreating || !newRoomName.trim()}>
-              {isCreating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Creating...
-                </>
-              ) : (
-                "Create Room"
-              )}
+            <Button type="submit" disabled={isLoading || !formData.name.trim()}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create Room
             </Button>
           </div>
         </form>

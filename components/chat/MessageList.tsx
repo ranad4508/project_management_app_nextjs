@@ -1,113 +1,106 @@
 "use client";
 
+import { useState, useRef } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Loader2, Trash2 } from "lucide-react";
-import type { DecryptedMessage } from "@/src/types/chat.types";
+import { MessageItem } from "./MessageItem";
+import { Loader2, AlertCircle } from "lucide-react";
+import type { ChatMessage } from "@/src/types/chat.types";
 
 interface MessageListProps {
-  messages: DecryptedMessage[];
+  messages: ChatMessage[];
   isLoading: boolean;
   error: any;
-  onRetry: () => void;
-  userId: string;
-  onReply: (messageId: string) => void;
-  onAddReaction: (messageId: string, type: string, emoji?: string) => void;
-  onRemoveReaction: (messageId: string, reactionType: string) => void;
-  onDeleteMessage: (messageId: string) => void;
+  onLoadMore: () => void;
 }
 
-export default function MessageList({
+export function MessageList({
   messages,
   isLoading,
   error,
-  onRetry,
-  userId,
-  onReply,
-  onAddReaction,
-  onRemoveReaction,
-  onDeleteMessage,
+  onLoadMore,
 }: MessageListProps) {
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    );
-  }
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [hasMore, setHasMore] = useState(true);
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center flex-col">
-        <p className="text-red-500 mb-2">Failed to load messages</p>
-        <Button onClick={onRetry}>Retry</Button>
+      <div className="flex flex-1 items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto h-8 w-8 text-destructive" />
+          <h3 className="mt-2 text-sm font-semibold">
+            Failed to load messages
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Please try refreshing the page
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
-      {messages.map((msg) => (
-        <div
-          key={msg.id}
-          className={`mb-4 ${
-            msg.sender.id === userId ? "text-right" : "text-left"
-          }`}
-        >
-          <div
-            className={`inline-block p-2 rounded-lg ${
-              msg.sender.id === userId ? "bg-blue-100" : "bg-gray-100"
-            }`}
-          >
-            <div className="font-semibold">{msg.sender.name}</div>
-            <div>{msg.content}</div>
-            {msg.attachments?.map((att, idx) => (
-              <a
-                key={idx}
-                href={att.fileUrl}
-                className="text-blue-600 underline"
-              >
-                {att.fileName}
-              </a>
-            ))}
-            <div className="text-xs text-gray-500">
-              {new Date(msg.createdAt).toLocaleTimeString()}
-            </div>
-            <div className="flex gap-1 mt-1">
-              <Button size="sm" variant="ghost" onClick={() => onReply(msg.id)}>
-                Reply
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => onAddReaction(msg.id, "like")}
-              >
-                👍
-              </Button>
-              {msg.reactions
-                .filter((r) => r.user === userId)
-                .map((r) => (
-                  <Button
-                    key={r.type}
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onRemoveReaction(msg.id, r.type)}
-                  >
-                    {r.emoji || r.type}
-                  </Button>
-                ))}
-              {msg.sender.id === userId && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onDeleteMessage(msg.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+    <ScrollArea ref={scrollAreaRef} className="flex-1 px-4">
+      <div className="space-y-4 py-4">
+        {/* Load more button */}
+        {hasMore && messages.length > 0 && (
+          <div className="text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                "Load more messages"
               )}
+            </Button>
+          </div>
+        )}
+
+        {/* Messages */}
+        {messages.map((message, index) => {
+          const previousMessage = messages[index - 1];
+          const showAvatar =
+            !previousMessage ||
+            previousMessage.sender._id !== message.sender._id ||
+            new Date(message.createdAt).getTime() -
+              new Date(previousMessage.createdAt).getTime() >
+              300000; // 5 minutes
+
+          return (
+            <MessageItem
+              key={message._id}
+              message={message}
+              showAvatar={showAvatar}
+            />
+          );
+        })}
+
+        {/* Loading indicator */}
+        {isLoading && messages.length === 0 && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && messages.length === 0 && (
+          <div className="flex flex-1 items-center justify-center py-8">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold">No messages yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Be the first to send a message in this room
+              </p>
             </div>
           </div>
-        </div>
-      ))}
-    </div>
+        )}
+      </div>
+    </ScrollArea>
   );
 }

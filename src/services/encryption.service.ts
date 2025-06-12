@@ -1,212 +1,167 @@
-import { Types } from "mongoose";
-import { UserKeyPair, ChatRoomKey } from "@/src/models/encryption";
-import { ChatRoom } from "@/src/models/chat";
-import { EncryptionUtils } from "@/src/utils/encryption.utils";
-import { ValidationError } from "@/src/errors/validation.error";
-import type {
-  MessageEncryptionData,
-  EncryptedMessageData,
-  UserKeyPairData,
-  ChatRoomKeyData,
-} from "@/src/types/chat.types";
+import crypto from "crypto";
+import type { EncryptionKeys, EncryptedMessage } from "@/src/types/chat.types";
 
 export class EncryptionService {
-  constructor() {
-    // Initialize EncryptionUtils to generate necessary keys
-    EncryptionUtils.initialize();
+  private static readonly ALGORITHM = "aes-256-gcm";
+  private static readonly KEY_LENGTH = 32;
+  private static readonly IV_LENGTH = 16;
+
+  /**
+   * Generate Diffie-Hellman key pair
+   */
+  static generateDHKeyPair(): EncryptionKeys {
+    const dh = crypto.createDiffieHellman(2048);
+    dh.generateKeys();
+
+    return {
+      publicKey: dh.getPublicKey("hex"),
+      privateKey: dh.getPrivateKey("hex"),
+    };
   }
 
-  async initializeUserEncryption(
-    userId: string,
-    password: string
-  ): Promise<UserKeyPairData> {
-    const existingKeyPair = await UserKeyPair.findOne({ user: userId });
-    if (existingKeyPair) {
-      throw new ValidationError("User encryption already initialized");
-    }
+  /**
+   * Compute shared secret from DH key exchange
+   */
+  static computeSharedSecret(
+    privateKey: string,
+    otherPublicKey: string
+  ): string {
+    const dh = crypto.createDiffieHellman(2048);
+    dh.setPrivateKey(Buffer.from(privateKey, "hex"));
 
-    const publicKey = EncryptionUtils.getPublicRSAKey();
-    const { encrypted, salt, iv } = EncryptionUtils.encryptPrivateKey(
-      EncryptionUtils.hashContent(password), // Hash password for added security
-      password
+    const sharedSecret = dh.computeSecret(Buffer.from(otherPublicKey, "hex"));
+
+    return crypto
+      .createHash("sha256")
+      .update(sharedSecret)
+      .digest("hex")
+      .substring(0, this.KEY_LENGTH * 2);
+  }
+
+  /**
+   * Generate AES key from shared secret
+   */
+  static deriveAESKey(sharedSecret: string, salt?: string): Buffer {
+    const saltBuffer = salt ? Buffer.from(salt, "hex") : crypto.randomBytes(16);
+
+    return crypto.pbkdf2Sync(
+      Buffer.from(sharedSecret, "hex"),
+      saltBuffer,
+      100000,
+      this.KEY_LENGTH,
+      "sha256"
     );
-
-    const keyPair = new UserKeyPair({
-      user: new Types.ObjectId(userId),
-      publicKey,
-      privateKeyEncrypted: encrypted,
-      salt,
-      iv,
-      keyVersion: 1,
-    });
-
-    await keyPair.save();
-
-    return {
-      publicKey,
-      privateKeyEncrypted: encrypted,
-      keyVersion: 1,
-    };
   }
 
-  async getUserPrivateKey(userId: string, password: string): Promise<string> {
-    const keyPair = await UserKeyPair.findOne({ user: userId });
-    if (!keyPair) {
-      throw new ValidationError("User encryption not initialized");
-    }
-
-    try {
-      return EncryptionUtils.decryptPrivateKey(
-        keyPair.privateKeyEncrypted,
-        password,
-        keyPair.salt,
-        keyPair.iv
-      );
-    } catch (error: any) {
-      throw new ValidationError("Invalid encryption password");
-    }
-  }
-
-  async encryptMessage(
+  /**
+   * Encrypt message content
+   */
+  static encryptMessage(
     content: string,
-    roomId: string,
-    senderId: string,
-    password: string
-  ): Promise<EncryptedMessageData> {
-    const roomKey = await this.getRoomKey(roomId, senderId, password);
-    const { encrypted, iv, tag, salt } =
-      EncryptionUtils.encryptMessage(content);
+    sharedSecret: string,
+    keyId: string
+  ): EncryptedMessage {
+    const key = this.deriveAESKey(sharedSecret);
+    const iv = crypto.randomBytes(this.IV_LENGTH);
+
+    const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv);
+    cipher.setAAD(Buffer.from(keyId));
+
+    let encrypted = cipher.update(content, "utf8", "hex");
+    encrypted += cipher.final("hex");
+
+    const authTag = cipher.getAuthTag();
 
     return {
-      content: encrypted,
-      encryptionData: {
-        iv,
-        tag,
-        senderPublicKey: (await UserKeyPair.findOne({ user: senderId }))!
-          .publicKey,
-      },
+      encryptedContent: encrypted + ":" + authTag.toString("hex"),
+      iv: iv.toString("hex"),
+      keyId,
     };
   }
 
-  async decryptMessage(
-    encryptedContent: string,
-    encryptionData: MessageEncryptionData,
-    roomId: string,
-    userId: string,
-    password: string
-  ): Promise<string> {
-    const roomKey = await this.getRoomKey(roomId, userId, password);
-    try {
-      return EncryptionUtils.decryptMessage(
-        encryptedContent,
-        encryptionData.iv,
-        encryptionData.tag,
-        encryptionData.salt || EncryptionUtils.hashContent(password) // Fallback salt
-      );
-    } catch (error: any) {
-      throw new ValidationError("Failed to decrypt message");
-    }
+  /**
+   * Decrypt message content
+   */
+  static decryptMessage(
+    encryptedMessage: EncryptedMessage,
+    sharedSecret: string
+  ): string {
+    const key = this.deriveAESKey(sharedSecret);
+    const iv = Buffer.from(encryptedMessage.iv, "hex");
+
+    const [encryptedContent, authTagHex] =
+      encryptedMessage.encryptedContent.split(":");
+    const authTag = Buffer.from(authTagHex, "hex");
+
+    const decipher = crypto.createDecipheriv(this.ALGORITHM, key, iv);
+    decipher.setAAD(Buffer.from(encryptedMessage.keyId));
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encryptedContent, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+
+    return decrypted;
   }
 
-  async getRoomKey(
-    roomId: string,
-    userId: string,
-    password: string
-  ): Promise<string> {
-    const roomKeyDoc = await ChatRoomKey.findOne({
-      roomId: new Types.ObjectId(roomId),
-      user: new Types.ObjectId(userId),
-    });
-    if (!roomKeyDoc) {
-      throw new ValidationError("Room key not found");
-    }
+  /**
+   * Encrypt file
+   */
+  static encryptFile(
+    fileBuffer: Buffer,
+    sharedSecret: string,
+    keyId: string
+  ): { encryptedBuffer: Buffer; iv: string } {
+    const key = this.deriveAESKey(sharedSecret);
+    const iv = crypto.randomBytes(this.IV_LENGTH);
 
-    const privateKey = await this.getUserPrivateKey(userId, password);
-    try {
-      return EncryptionUtils.decryptWithRSA(roomKeyDoc.encryptedRoomKey);
-    } catch (error: any) {
-      throw new ValidationError("Failed to decrypt room key");
-    }
+    const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv);
+    cipher.setAAD(Buffer.from(keyId));
+
+    const encrypted = Buffer.concat([
+      cipher.update(fileBuffer),
+      cipher.final(),
+      cipher.getAuthTag(),
+    ]);
+
+    return {
+      encryptedBuffer: encrypted,
+      iv: iv.toString("hex"),
+    };
   }
 
-  async addParticipantToRoom(
-    roomId: string,
-    participantId: string,
-    password: string
-  ): Promise<void> {
-    const room = await ChatRoom.findById(roomId).populate("participants.user");
-    if (!room) {
-      throw new ValidationError("Room not found");
-    }
+  /**
+   * Decrypt file
+   */
+  static decryptFile(
+    encryptedBuffer: Buffer,
+    iv: string,
+    sharedSecret: string,
+    keyId: string
+  ): Buffer {
+    const key = this.deriveAESKey(sharedSecret);
+    const ivBuffer = Buffer.from(iv, "hex");
 
-    const participantKeyPair = await UserKeyPair.findOne({
-      user: participantId,
-    });
-    if (!participantKeyPair) {
-      throw new ValidationError("Participant encryption not initialized");
-    }
+    const authTag = encryptedBuffer.slice(-16);
+    const encrypted = encryptedBuffer.slice(0, -16);
 
-    let roomKeyDoc = await ChatRoomKey.findOne({
-      roomId: new Types.ObjectId(roomId),
-      user: room.participants[0].user._id,
-    });
+    const decipher = crypto.createDecipheriv(this.ALGORITHM, key, ivBuffer);
+    decipher.setAAD(Buffer.from(keyId));
+    decipher.setAuthTag(authTag);
 
-    let roomKey: string;
-    if (!roomKeyDoc) {
-      roomKey = EncryptionUtils.generateRoomKey();
-      for (const participant of room.participants) {
-        const publicKey = (await UserKeyPair.findOne({
-          user: participant.user._id,
-        }))!.publicKey;
-        const encryptedRoomKey = EncryptionUtils.encryptWithRSA(roomKey);
-        await ChatRoomKey.create({
-          roomId: new Types.ObjectId(roomId),
-          user: participant.user._id,
-          encryptedRoomKey,
-          keyVersion: 1,
-        });
-      }
-    } else {
-      const ownerPrivateKey = await this.getUserPrivateKey(
-        room.participants[0].user._id.toString(),
-        password
-      );
-      roomKey = EncryptionUtils.decryptWithRSA(roomKeyDoc.encryptedRoomKey);
-    }
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  }
 
-    const encryptedRoomKey = EncryptionUtils.encryptWithRSA(roomKey);
-    await ChatRoomKey.create({
-      roomId: new Types.ObjectId(roomId),
-      user: new Types.ObjectId(participantId),
-      encryptedRoomKey,
-      keyVersion: 1,
-    });
+  /**
+   * Generate room encryption key ID
+   */
+  static generateKeyId(): string {
+    return crypto.randomBytes(16).toString("hex");
+  }
 
-    // Update Diffie-Hellman shared secrets
-    const participants = [
-      ...room.participants.map((p: any) => p.user._id.toString()),
-      participantId,
-    ];
-    for (const userId of participants) {
-      const userKeyPair = await UserKeyPair.findOne({ user: userId });
-      if (!userKeyPair) continue;
-
-      for (const otherUserId of participants) {
-        if (userId === otherUserId) continue;
-        const otherKeyPair = await UserKeyPair.findOne({ user: otherUserId });
-        if (!otherKeyPair) continue;
-
-        const otherPublicDHKey = EncryptionUtils.getPublicRSAKey();
-        await EncryptionUtils.exchangeKeys(otherPublicDHKey);
-        const sharedSecret = EncryptionUtils.hashContent(userId + otherUserId); // Simplified for consistency
-        await ChatRoomKey.updateOne(
-          {
-            roomId: new Types.ObjectId(roomId),
-            user: new Types.ObjectId(userId),
-          },
-          { $set: { sharedSecret } }
-        );
-      }
-    }
+  /**
+   * Hash password for room access
+   */
+  static hashPassword(password: string): string {
+    return crypto.createHash("sha256").update(password).digest("hex");
   }
 }

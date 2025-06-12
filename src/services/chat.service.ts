@@ -1,706 +1,569 @@
-import { Types, Document } from "mongoose";
-import { ChatRoom, ChatMessage } from "@/src/models/chat";
-import { EncryptionService } from "@/src/services/encryption.service";
-import { ValidationError } from "@/src/errors/validation.error";
+import { ChatRoom } from "@/src/models/chat-room";
+import { ChatMessage } from "@/src/models/chat-message";
+import { RoomInvitation } from "@/src/models/room-invitation";
+import { Workspace } from "@/src/models/workspace";
+import { EncryptionService } from "./encryption.service";
+import { FileUploadService } from "./file-upload.service";
+import {
+  NotFoundError,
+  AuthorizationError,
+  ValidationError,
+  ConflictError,
+} from "@/src/errors/AppError";
+import { RoomType } from "@/src/types/chat.types";
+import { MemberRole } from "@/src/enums/user.enum";
 import type {
-  CreateChatRoomData,
-  UpdateChatRoomData,
+  CreateRoomData,
+  UpdateRoomData,
   SendMessageData,
-  ChatRoomResponse,
-  MessagesResponse,
-  DecryptedMessage,
-  ReactionType,
+  ChatRoom as ChatRoomType,
+  ChatMessage as ChatMessageType,
 } from "@/src/types/chat.types";
-import type { PaginationParams } from "@/src/types/api.types";
-
-// Interface for lean ChatRoom document
-interface LeanChatRoom {
-  _id: Types.ObjectId;
-  workspaceId?: Types.ObjectId;
-  name: string;
-  description?: string;
-  type: "group" | "workspace";
-  participants: {
-    user: { _id: Types.ObjectId; name: string };
-    joinedAt: Date;
-  }[];
-  isPrivate: boolean;
-  unreadCount: { user: Types.ObjectId; count: number }[];
-  createdBy: { _id: Types.ObjectId; name: string };
-  createdAt: Date;
-  updatedAt: Date;
-  __v: number;
-}
-
-// Interface for lean ChatMessage document
-interface LeanChatMessage {
-  _id: Types.ObjectId;
-  room: Types.ObjectId;
-  sender: { _id: Types.ObjectId; name: string; avatar?: string };
-  content: string;
-  messageType: "text" | "attachment";
-  encryptionData: {
-    iv: string;
-    tag: string;
-    senderPublicKey: string;
-    salt?: string;
-  };
-  replyTo?: Types.ObjectId;
-  mentions?: Types.ObjectId[];
-  attachments: {
-    fileName: string;
-    fileType: string;
-    fileUrl: string;
-    fileSize: number;
-  }[];
-  reactions: { user: Types.ObjectId; type: string; emoji?: string }[];
-  isEdited: boolean;
-  readBy: { user: Types.ObjectId; readAt: Date }[];
-  createdAt: Date;
-  updatedAt: Date;
-  __v: number;
-}
+import { User } from "@/src/models/user";
+import { EmailService } from "./email.service";
 
 export class ChatService {
-  public encryptionService: EncryptionService;
+  private fileUploadService: FileUploadService;
 
   constructor() {
-    this.encryptionService = new EncryptionService();
+    this.fileUploadService = new FileUploadService();
   }
 
-  async createChatRoom(
+  /**
+   * Create a new chat room
+   */
+  async createRoom(
     userId: string,
-    data: CreateChatRoomData,
-    password: string
-  ): Promise<ChatRoomResponse> {
-    const room = new ChatRoom({
-      workspaceId: data.workspaceId
-        ? new Types.ObjectId(data.workspaceId)
-        : undefined,
-      name: data.name,
-      description: data.description,
-      type: data.type,
-      participants: [
-        { user: new Types.ObjectId(userId), joinedAt: new Date() },
-        ...data.participants.map((id) => ({
-          user: new Types.ObjectId(id),
-          joinedAt: new Date(),
-        })),
-      ],
-      isPrivate: data.isPrivate,
-      createdBy: new Types.ObjectId(userId),
-      unreadCount: [],
-    });
+    data: CreateRoomData
+  ): Promise<ChatRoomType> {
+    const {
+      name,
+      description,
+      type,
+      workspaceId,
+      isEncrypted = true,
+      inviteUsers = [],
+    } = data;
 
-    await room.save();
-
-    // Initialize encryption for all participants
-    for (const participant of room.participants) {
-      await this.encryptionService.addParticipantToRoom(
-        room._id.toString(),
-        participant.user.toString(),
-        password
-      );
+    // Verify workspace access
+    const workspace = await Workspace.findById(workspaceId);
+    if (!workspace) {
+      throw new NotFoundError("Workspace not found");
     }
 
-    const populatedRoom = (await ChatRoom.findById(room._id)
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom;
-
-    return this.mapToChatRoomResponse(populatedRoom);
-  }
-
-  async getUserChatRooms(userId: string): Promise<ChatRoomResponse[]> {
-    const rooms = (await ChatRoom.find({
-      participants: { $elemMatch: { user: new Types.ObjectId(userId) } },
-    })
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom[];
-
-    return rooms.map((room: any) => this.mapToChatRoomResponse(room));
-  }
-
-  async getWorkspaceChatRooms(
-    workspaceId: string,
-    userId: string
-  ): Promise<ChatRoomResponse[]> {
-    const rooms = (await ChatRoom.find({
-      workspaceId: new Types.ObjectId(workspaceId),
-      participants: { $elemMatch: { user: new Types.ObjectId(userId) } },
-    })
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom[];
-
-    return rooms.map((room: any) => this.mapToChatRoomResponse(room));
-  }
-
-  async getChatRoomById(
-    roomId: string,
-    userId: string
-  ): Promise<ChatRoomResponse> {
-    const room = (await ChatRoom.findOne({
-      _id: new Types.ObjectId(roomId),
-      participants: { $elemMatch: { user: new Types.ObjectId(userId) } },
-    })
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom;
-
-    if (!room) {
-      throw new ValidationError("Room not found or access denied", 404);
+    if (!workspace.isMember(userId)) {
+      throw new AuthorizationError("Access denied to workspace");
     }
 
-    return this.mapToChatRoomResponse(room);
-  }
-
-  async updateChatRoom(
-    roomId: string,
-    userId: string,
-    data: UpdateChatRoomData
-  ): Promise<ChatRoomResponse> {
-    const room = (await ChatRoom.findOneAndUpdate(
-      {
-        _id: new Types.ObjectId(roomId),
-        participants: { $elemMatch: { user: new Types.ObjectId(userId) } },
-      },
-      { $set: data },
-      { new: true }
-    )
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom;
-
-    if (!room) {
-      throw new ValidationError("Room not found or access denied", 404);
-    }
-
-    return this.mapToChatRoomResponse(room);
-  }
-
-  async addParticipantsToRoom(
-    roomId: string,
-    userId: string,
-    participantIds: string[],
-    password: string
-  ): Promise<ChatRoomResponse> {
-    const room = await ChatRoom.findOne({
-      _id: new Types.ObjectId(roomId),
-      participants: { $elemMatch: { user: new Types.ObjectId(userId) } },
-    });
-
-    if (!room) {
-      throw new ValidationError("Invalid room ID or access denied", 400);
-    }
-
-    const newParticipants = participantIds
-      .filter(
-        (id) =>
-          !room.participants.some((p: any) => p.user.toString() === id) &&
-          id !== userId
-      )
-      .map((id) => ({
-        user: new Types.ObjectId(id),
-        joinedAt: new Date(),
-      }));
-
-    if (newParticipants.length === 0) {
-      throw new ValidationError("No new participants to add", 400);
-    }
-
-    room.participants.push(...newParticipants);
-    await room.save();
-
-    for (const id of participantIds) {
-      await this.encryptionService.addParticipantToRoom(roomId, id, password);
-    }
-
-    const populatedRoom = (await ChatRoom.findById(room._id)
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom;
-
-    return this.mapToChatRoomResponse(populatedRoom);
-  }
-
-  async removeParticipantFromRoom(
-    roomId: string,
-    userId: string,
-    participantId: string
-  ): Promise<ChatRoomResponse> {
-    const room = await ChatRoom.findOne({
-      _id: new Types.ObjectId(roomId),
-      participants: { $elemMatch: { user: new Types.ObjectId(userId) } },
-    });
-    if (!room) {
-      throw new ValidationError("Room not found or access denied", 404);
-    }
-
-    room.participants = room.participants.filter(
-      (p: any) => p.user.toString() !== participantId
-    );
-    await room.save();
-
-    const populatedRoom = (await ChatRoom.findById(room._id)
-      .populate("participants.user", "name")
-      .populate("createdBy", "name")
-      .lean()) as LeanChatRoom;
-
-    return this.mapToChatRoomResponse(populatedRoom);
-  }
-
-  async sendMessage(
-    userId: string,
-    data: SendMessageData,
-    password: string
-  ): Promise<DecryptedMessage> {
-    const room = await ChatRoom.findById(data.roomId);
-    if (
-      !room ||
-      !room.participants.some((p: any) => p.user.toString() === userId)
-    ) {
-      throw new ValidationError("Room not found or access denied", 404);
-    }
-
-    const encrypted = await this.encryptionService.encryptMessage(
-      data.content || "",
-      data.roomId,
-      userId,
-      password
-    );
-
-    const message = new ChatMessage({
-      room: new Types.ObjectId(data.roomId),
-      sender: new Types.ObjectId(userId),
-      content: encrypted.content,
-      messageType: data.messageType,
-      encryptionData: encrypted.encryptionData,
-      replyTo: data.replyTo ? new Types.ObjectId(data.replyTo) : undefined,
-      mentions: data.mentions?.map((id) => new Types.ObjectId(id)) || [],
-      attachments: data.attachments || [],
-      reactions: [],
-      readBy: [{ user: new Types.ObjectId(userId), readAt: new Date() }],
-    });
-
-    await message.save();
-
-    room.lastMessage = message._id;
-    room.unreadCount = room.participants.map((p: any) => ({
-      user: p.user,
-      count:
-        p.user.toString() === userId
-          ? 0
-          : (room.unreadCount.find(
-              (u: any) => u.user.toString() === p.user.toString()
-            )?.count || 0) + 1,
-    }));
-    await room.save();
-
-    const decrypted = await this.encryptionService.decryptMessage(
-      message.content,
-      message.encryptionData,
-      data.roomId,
-      userId,
-      password
-    );
-
-    interface PopulatedSender {
-      sender: {
-        name: string;
-        avatar?: string;
-      };
-    }
-
-    const populatedSender = (await ChatMessage.findById(message._id)
-      .populate("sender", "name avatar")
-      .lean()) as unknown as PopulatedSender;
-
-    return {
-      id: message._id.toString(),
-      room: data.roomId,
-      content: decrypted,
-      sender: {
-        id: userId,
-        name: populatedSender?.sender.name || "",
-        avatar: populatedSender?.sender.avatar || "",
-      },
-      messageType: data.messageType,
-      replyTo: message.replyTo?.toString(),
-      mentions: message.mentions?.map((m: any) => m.toString()) || [],
-      attachments: message.attachments,
-      reactions: [],
-      isEdited: false,
-      readBy: [{ user: userId, readAt: new Date() }],
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-    };
-  }
-
-  async getChatRoomMessages(
-    roomId: string,
-    userId: string,
-    password: string,
-    pagination: PaginationParams
-  ): Promise<MessagesResponse> {
-    const room = await ChatRoom.findById(roomId);
-    if (
-      !room ||
-      !room.participants.some((p: any) => p.user.toString() === userId)
-    ) {
-      throw new ValidationError("Room not found or access denied", 404);
-    }
-
-    const { page = 1, limit = 50, sortOrder = "asc" } = pagination;
-    const skip = (page - 1) * limit;
-
-    const messages = (await ChatMessage.find({
-      room: new Types.ObjectId(roomId),
-    })
-      .sort({ createdAt: sortOrder === "asc" ? 1 : -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate("sender", "name avatar")
-      .lean()) as LeanChatMessage[];
-
-    const decryptedMessages = await Promise.all(
-      messages.map(async (msg: any) => {
-        const decrypted = await this.encryptionService.decryptMessage(
-          msg.content,
-          msg.encryptionData,
-          roomId,
-          userId,
-          password
-        );
-        return {
-          id: msg._id.toString(),
-          room: roomId,
-          content: decrypted,
-          sender: {
-            id: msg.sender._id.toString(),
-            name: msg.sender.name,
-            avatar: msg.sender.avatar,
-          },
-          messageType: msg.messageType,
-          replyTo: msg.replyTo?.toString(),
-          mentions: msg.mentions?.map((m: any) => m.toString()) || [],
-          attachments: msg.attachments,
-          reactions: msg.reactions.map((r: any) => ({
-            user: r.user.toString(),
-            type: r.type,
-            emoji: r.emoji,
-          })),
-          isEdited: msg.isEdited,
-          readBy: msg.readBy.map((r: any) => ({
-            user: r.user.toString(),
-            readAt: r.readAt,
-          })),
-          createdAt: msg.createdAt,
-          updatedAt: msg.updatedAt,
-        } as DecryptedMessage;
-      })
-    );
-
-    const total = await ChatMessage.countDocuments({
-      room: new Types.ObjectId(roomId),
-    });
-
-    return {
-      messages: decryptedMessages,
-      pagination: {
-        total,
-        page,
-        limit,
-      },
-    };
-  }
-
-  async markMessageAsRead(
-    messageId: string,
-    userId: string
-  ): Promise<{ success: boolean; message: string }> {
-    const message = await ChatMessage.findById(messageId).populate("room");
-    if (
-      !message ||
-      !((message.room as any).participants as any[]).some(
-        (p: any) => p.user.toString() === userId
-      )
-    ) {
-      throw new ValidationError("Message not found or access denied", 404);
-    }
-
-    if (!message.readBy.some((r: any) => r.user.toString() === userId)) {
-      message.readBy.push({
-        user: new Types.ObjectId(userId),
-        readAt: new Date(),
+    // Check if general room already exists for workspace
+    if (type === RoomType.GENERAL) {
+      const existingGeneral = await ChatRoom.findOne({
+        workspace: workspaceId,
+        type: RoomType.GENERAL,
       });
-      await message.save();
 
-      const room = await ChatRoom.findById(message.room);
-      if (room) {
-        room.unreadCount = room.unreadCount.map((u: any) =>
-          u.user.toString() === userId
-            ? { user: u.user, count: Math.max(0, u.count - 1) }
-            : u
+      if (existingGeneral) {
+        throw new ConflictError(
+          "General room already exists for this workspace"
         );
-        await room.save();
       }
     }
 
-    return { success: true, message: "Message marked as read" };
-  }
+    // Create room
+    const room = new ChatRoom({
+      name,
+      description,
+      type,
+      workspace: workspaceId,
+      createdBy: userId,
+      isEncrypted,
+      encryptionKeyId: isEncrypted
+        ? EncryptionService.generateKeyId()
+        : undefined,
+      members: [
+        {
+          user: userId,
+          role: MemberRole.ADMIN,
+          joinedAt: new Date(),
+        },
+      ],
+    });
 
-  async editMessage(
-    messageId: string,
-    userId: string,
-    content: string,
-    password: string
-  ): Promise<DecryptedMessage> {
-    const message = await ChatMessage.findOne({
-      _id: new Types.ObjectId(messageId),
-      sender: new Types.ObjectId(userId),
-    }).populate("room sender");
-    if (!message) {
-      throw new ValidationError("Message not found or access denied", 404);
+    // Add all workspace members to general room
+    if (type === RoomType.GENERAL) {
+      const workspaceMembers = workspace.members.map((member: any) => ({
+        user: member.user,
+        role: member.role,
+        joinedAt: new Date(),
+      }));
+
+      room.members = workspaceMembers;
+    } else if (inviteUsers.length > 0) {
+      // Add invited users to private room
+      const invitedMembers = inviteUsers.map((inviteUserId) => ({
+        user: inviteUserId,
+        role: MemberRole.MEMBER,
+        joinedAt: new Date(),
+      }));
+
+      room.members.push(...invitedMembers);
     }
 
-    const encrypted = await this.encryptionService.encryptMessage(
+    await room.save();
+    await room.populate([
+      { path: "createdBy", select: "name email avatar" },
+      { path: "members.user", select: "name email avatar" },
+      { path: "workspace", select: "name" },
+    ]);
+
+    return room.toObject();
+  }
+
+  /**
+   * Get user's chat rooms
+   */
+  async getUserRooms(
+    userId: string,
+    workspaceId?: string
+  ): Promise<ChatRoomType[]> {
+    const query: any = {
+      "members.user": userId,
+    };
+
+    if (workspaceId) {
+      query.workspace = workspaceId;
+    }
+
+    const rooms = await ChatRoom.find(query)
+      .populate("createdBy", "name email avatar")
+      .populate("members.user", "name email avatar")
+      .populate("lastMessage")
+      .populate("workspace", "name")
+      .sort({ lastActivity: -1 });
+
+    return rooms.map((room) => room.toObject());
+  }
+
+  /**
+   * Get room by ID
+   */
+  async getRoomById(roomId: string, userId: string): Promise<ChatRoomType> {
+    const room = await ChatRoom.findById(roomId)
+      .populate("createdBy", "name email avatar")
+      .populate("members.user", "name email avatar")
+      .populate("workspace", "name");
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (!room.isMember(userId)) {
+      throw new AuthorizationError("Access denied to this room");
+    }
+
+    return room.toObject();
+  }
+
+  /**
+   * Update room
+   */
+  async updateRoom(
+    roomId: string,
+    userId: string,
+    data: UpdateRoomData
+  ): Promise<ChatRoomType> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (!room.isAdmin(userId)) {
+      throw new AuthorizationError("Admin access required");
+    }
+
+    Object.assign(room, data);
+    await room.save();
+    await room.populate([
+      { path: "createdBy", select: "name email avatar" },
+      { path: "members.user", select: "name email avatar" },
+    ]);
+
+    return room.toObject();
+  }
+
+  /**
+   * Delete room
+   */
+  async deleteRoom(roomId: string, userId: string): Promise<void> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (room.createdBy.toString() !== userId) {
+      throw new AuthorizationError("Only room creator can delete the room");
+    }
+
+    if (room.type === RoomType.GENERAL) {
+      throw new ValidationError("Cannot delete general room");
+    }
+
+    // Delete all messages in the room
+    await ChatMessage.deleteMany({ room: roomId });
+
+    // Delete room invitations
+    await RoomInvitation.deleteMany({ room: roomId });
+
+    // Delete the room
+    await ChatRoom.findByIdAndDelete(roomId);
+  }
+
+  /**
+   * Send message
+   */
+  async sendMessage(
+    userId: string,
+    data: SendMessageData
+  ): Promise<ChatMessageType> {
+    const {
+      roomId,
       content,
-      (message.room as any)._id.toString(),
-      userId,
-      password
-    );
+      type,
+      attachments,
+      replyTo,
+      isEncrypted = true,
+    } = data;
 
-    message.content = encrypted.content;
-    message.encryptionData = encrypted.encryptionData;
-    message.isEdited = true;
+    // Verify room access
+    const room = await ChatRoom.findById(roomId);
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (!room.isMember(userId)) {
+      throw new AuthorizationError("Access denied to this room");
+    }
+
+    // Handle file attachments
+    let processedAttachments: any[] = [];
+    if (attachments && attachments.length > 0) {
+      processedAttachments = await Promise.all(
+        attachments.map(async (file) => {
+          const uploadResult = await this.fileUploadService.uploadFile(
+            file,
+            userId
+          );
+
+          // Encrypt file if room is encrypted
+          if (room.isEncrypted && isEncrypted) {
+            // This would require the shared secret - implement based on your key management
+            // const encryptedFile = EncryptionService.encryptFile(fileBuffer, sharedSecret, room.encryptionKeyId!);
+          }
+
+          return {
+            filename: uploadResult.filename,
+            originalName: file.name,
+            mimeType: file.type,
+            size: file.size,
+            url: uploadResult.url,
+          };
+        })
+      );
+    }
+
+    // Create message
+    const message = new ChatMessage({
+      room: roomId,
+      sender: userId,
+      type,
+      content,
+      attachments: processedAttachments,
+      replyTo,
+    });
+
+    // Encrypt content if room is encrypted
+    if (room.isEncrypted && isEncrypted && room.encryptionKeyId) {
+      // This would require implementing key management for the room
+      // const encryptedContent = EncryptionService.encryptMessage(content, sharedSecret, room.encryptionKeyId);
+      // message.encryptedContent = encryptedContent;
+    }
+
     await message.save();
+    await message.populate([
+      { path: "sender", select: "name email avatar" },
+      { path: "replyTo", populate: { path: "sender", select: "name email" } },
+    ]);
 
-    const decrypted = await this.encryptionService.decryptMessage(
-      message.content,
-      message.encryptionData,
-      (message.room as any)._id.toString(),
-      userId,
-      password
-    );
+    // Update room's last activity
+    room.lastActivity = new Date();
+    room.lastMessage = message._id;
+    await room.save();
+
+    return message.toObject();
+  }
+
+  /**
+   * Get room messages
+   */
+  async getRoomMessages(
+    roomId: string,
+    userId: string,
+    page = 1,
+    limit = 50
+  ): Promise<{ messages: ChatMessageType[]; total: number }> {
+    // Verify room access
+    const room = await ChatRoom.findById(roomId);
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (!room.isMember(userId)) {
+      throw new AuthorizationError("Access denied to this room");
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [messages, total] = await Promise.all([
+      ChatMessage.find({
+        room: roomId,
+        deletedAt: { $exists: false },
+      })
+        .populate("sender", "name email avatar")
+        .populate("reactions.user", "name email avatar")
+        .populate({
+          path: "replyTo",
+          populate: { path: "sender", select: "name email" },
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      ChatMessage.countDocuments({
+        room: roomId,
+        deletedAt: { $exists: false },
+      }),
+    ]);
 
     return {
-      id: message._id.toString(),
-      room: (message.room as any)._id.toString(),
-      content: decrypted,
-      sender: {
-        id: (message.sender as any)._id.toString(),
-        name: (message.sender as any).name,
-        avatar: (message.sender as any).avatar,
-      },
-      messageType: message.messageType,
-      replyTo: message.replyTo?.toString(),
-      mentions: message.mentions?.map((m: any) => m.toString()) || [],
-      attachments: message.attachments,
-      reactions: message.reactions.map((r: any) => ({
-        user: r.user.toString(),
-        type: r.type,
-        emoji: r.emoji,
-      })),
-      isEdited: true,
-      readBy: message.readBy.map((r: any) => ({
-        user: r.user.toString(),
-        readAt: r.readAt,
-      })),
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
+      messages: messages.reverse().map((msg) => msg.toObject()),
+      total,
     };
   }
 
-  async deleteMessage(
-    messageId: string,
-    userId: string
-  ): Promise<{ success: boolean; message: string }> {
-    const message = await ChatMessage.findOne({
-      _id: new Types.ObjectId(messageId),
-      sender: new Types.ObjectId(userId),
-    });
-    if (!message) {
-      throw new ValidationError("Message not found or access denied", 404);
-    }
-
-    await message.deleteOne();
-    return { success: true, message: "Message deleted" };
-  }
-
+  /**
+   * Add reaction to message
+   */
   async addReaction(
     messageId: string,
     userId: string,
-    type: ReactionType,
-    emoji?: string
-  ): Promise<DecryptedMessage> {
-    const message = await ChatMessage.findById(messageId).populate(
-      "room sender"
-    );
-    if (
-      !message ||
-      !((message.room as any).participants as any[]).some(
-        (p: any) => p.user.toString() === userId
-      )
-    ) {
-      throw new ValidationError("Message not found or access denied", 404);
+    reactionType: string
+  ): Promise<ChatMessageType> {
+    const message = await ChatMessage.findById(messageId);
+    if (!message) {
+      throw new NotFoundError("Message not found");
     }
 
-    if (
-      !message.reactions.some(
-        (r: any) => r.user.toString() === userId && r.type === type
-      )
-    ) {
-      message.reactions.push({ user: new Types.ObjectId(userId), type, emoji });
-      await message.save();
-    }
-
-    const decrypted = await this.encryptionService.decryptMessage(
-      message.content,
-      message.encryptionData,
-      (message.room as any)._id.toString(),
-      userId,
-      "password" // Controller provides password
+    // Check if user already reacted with this type
+    const existingReaction = message.reactions.find(
+      (reaction: any) =>
+        reaction.user.toString() === userId && reaction.type === reactionType
     );
 
-    return {
-      id: message._id.toString(),
-      room: (message.room as any)._id.toString(),
-      content: decrypted,
-      sender: {
-        id: (message.sender as any)._id.toString(),
-        name: (message.sender as any).name,
-        avatar: (message.sender as any).avatar,
-      },
-      messageType: message.messageType,
-      replyTo: message.replyTo?.toString(),
-      mentions: message.mentions?.map((m: any) => m.toString()) || [],
-      attachments: message.attachments,
-      reactions: message.reactions.map((r: any) => ({
-        user: r.user.toString(),
-        type: r.type,
-        emoji: r.emoji,
-      })),
-      isEdited: message.isEdited,
-      readBy: message.readBy.map((r: any) => ({
-        user: r.user.toString(),
-        readAt: r.readAt,
-      })),
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-    };
+    if (existingReaction) {
+      throw new ConflictError("You already reacted with this emoji");
+    }
+
+    message.reactions.push({
+      user: userId as any,
+      type: reactionType as any,
+      createdAt: new Date(),
+    });
+
+    await message.save();
+    await message.populate([
+      { path: "sender", select: "name email avatar" },
+      { path: "reactions.user", select: "name email avatar" },
+    ]);
+
+    return message.toObject();
   }
 
+  /**
+   * Remove reaction from message
+   */
   async removeReaction(
     messageId: string,
     userId: string,
-    reactionType: string
-  ): Promise<DecryptedMessage> {
-    const message = await ChatMessage.findById(messageId).populate(
-      "room sender"
-    );
-    if (
-      !message ||
-      !((message.room as any).participants as any[]).some(
-        (p: any) => p.user.toString() === userId
-      )
-    ) {
-      throw new ValidationError("Message not found or access denied", 404);
+    reactionId: string
+  ): Promise<ChatMessageType> {
+    const message = await ChatMessage.findById(messageId);
+    if (!message) {
+      throw new NotFoundError("Message not found");
     }
 
     message.reactions = message.reactions.filter(
-      (r: any) => !(r.user.toString() === userId && r.type === reactionType)
+      (reaction: any) => reaction._id.toString() !== reactionId
     );
+
     await message.save();
+    await message.populate([
+      { path: "sender", select: "name email avatar" },
+      { path: "reactions.user", select: "name email avatar" },
+    ]);
 
-    const decrypted = await this.encryptionService.decryptMessage(
-      message.content,
-      message.encryptionData,
-      (message.room as any)._id.toString(),
-      userId,
-      "password" // Controller provides password
-    );
-
-    return {
-      id: message._id.toString(),
-      room: (message.room as any)._id.toString(),
-      content: decrypted,
-      sender: {
-        id: (message.sender as any)._id.toString(),
-        name: (message.sender as any).name,
-        avatar: (message.sender as any).avatar,
-      },
-      messageType: message.messageType,
-      replyTo: message.replyTo?.toString(),
-      mentions: message.mentions?.map((m: any) => m.toString()) || [],
-      attachments: message.attachments,
-      reactions: message.reactions.map((r: any) => ({
-        user: r.user.toString(),
-        type: r.type,
-        emoji: r.emoji,
-      })),
-      isEdited: message.isEdited,
-      readBy: message.readBy.map((r: any) => ({
-        user: r.user.toString(),
-        readAt: r.readAt,
-      })),
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-    };
+    return message.toObject();
   }
 
-  async ensureWorkspaceGeneralRoom(
-    workspaceId: string,
-    userId: string,
-    password: string
-  ): Promise<ChatRoomResponse> {
-    let room = (await ChatRoom.findOne({
-      workspaceId: new Types.ObjectId(workspaceId),
-      name: "General",
-      type: "workspace",
-    }).lean()) as LeanChatRoom;
-
+  /**
+   * Invite user to room
+   */
+  async inviteToRoom(
+    roomId: string,
+    inviterId: string,
+    invitedUserId: string
+  ): Promise<void> {
+    const room = await ChatRoom.findById(roomId);
     if (!room) {
-      const newRoom = await this.createChatRoom(
-        userId,
-        {
-          workspaceId,
-          name: "General",
-          type: "workspace",
-          participants: [],
-          isPrivate: false,
-        },
-        password
-      );
-      return newRoom;
+      throw new NotFoundError("Room not found");
     }
 
-    return this.mapToChatRoomResponse(room);
+    if (!room.isAdmin(inviterId)) {
+      throw new AuthorizationError("Admin access required to invite users");
+    }
+
+    if (room.isMember(invitedUserId)) {
+      throw new ConflictError("User is already a member of this room");
+    }
+
+    // Create invitation
+    const invitation = new RoomInvitation({
+      room: roomId,
+      invitedBy: inviterId,
+      invitedUser: invitedUserId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    });
+
+    await invitation.save();
   }
 
-  private mapToChatRoomResponse(room: LeanChatRoom): ChatRoomResponse {
-    return {
-      _id: room._id.toString(),
-      workspace: room.workspaceId?.toString() || "",
-      name: room.name,
-      description: room.description,
-      type: room.type,
-      participants: room.participants.map((p: any) => ({
-        user: {
-          _id: p.user._id.toString(),
-          name: p.user.name,
-        },
-        joinedAt: p.joinedAt,
-      })),
-      isPrivate: room.isPrivate,
-      createdBy: room.createdBy._id.toString(),
-      unreadCount: room.unreadCount.map((u: any) => ({
-        user: u.user.toString(),
-        count: u.count,
-      })),
-      createdAt: room.createdAt,
-      updatedAt: room.updatedAt,
-    };
+  /**
+   * Invite user to room with email notification
+   */
+  async inviteToRoomWithEmail(
+    roomId: string,
+    inviterId: string,
+    invitedUserId: string
+  ): Promise<void> {
+    // First, create the room invitation in the database
+    await this.inviteToRoom(roomId, inviterId, invitedUserId);
+
+    try {
+      // Get room details
+      const room = await ChatRoom.findById(roomId)
+        .populate("workspace", "name")
+        .populate({
+          path: "createdBy",
+          select: "name email",
+        });
+
+      if (!room) {
+        throw new NotFoundError("Room not found");
+      }
+
+      // Get inviter details
+      const inviter = await User.findById(inviterId).select("name email");
+
+      // Get invited user details
+      const invitedUser = await User.findById(invitedUserId).select(
+        "name email"
+      );
+
+      if (!invitedUser || !invitedUser.email) {
+        throw new NotFoundError("Invited user not found");
+      }
+
+      // Send email invitation
+      const emailService = new EmailService();
+      await emailService.sendRoomInvitationEmail(
+        invitedUser.email,
+        inviter?.name || "A team member",
+        invitedUser.name,
+        room.name,
+        room.workspace.name,
+        roomId
+      );
+
+      console.log(
+        `Email invitation sent to ${invitedUser.email} for room ${room.name}`
+      );
+    } catch (error) {
+      console.error("Failed to send room invitation email:", error);
+      // Don't fail the invitation process if email sending fails
+    }
+  }
+
+  /**
+   * Accept room invitation
+   */
+  async acceptRoomInvitation(
+    invitationId: string,
+    userId: string
+  ): Promise<void> {
+    const invitation = await RoomInvitation.findById(invitationId);
+    if (!invitation) {
+      throw new NotFoundError("Invitation not found");
+    }
+
+    if (invitation.invitedUser.toString() !== userId) {
+      throw new AuthorizationError("This invitation is not for you");
+    }
+
+    if (invitation.status !== "pending") {
+      throw new ValidationError("Invitation is no longer pending");
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      throw new ValidationError("Invitation has expired");
+    }
+
+    // Add user to room
+    const room = await ChatRoom.findById(invitation.room);
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    room.members.push({
+      user: userId as any,
+      role: MemberRole.MEMBER,
+      joinedAt: new Date(),
+    });
+
+    await room.save();
+
+    // Update invitation status
+    invitation.status = "accepted";
+    await invitation.save();
+  }
+
+  /**
+   * Update user's last read timestamp for a room
+   */
+  async updateLastRead(roomId: string, userId: string): Promise<void> {
+    const room = await ChatRoom.findById(roomId);
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    const memberIndex = room.members.findIndex(
+      (member: any) => member.user.toString() === userId
+    );
+
+    if (memberIndex === -1) {
+      throw new AuthorizationError("Access denied to this room");
+    }
+
+    room.members[memberIndex].lastReadAt = new Date();
+    await room.save();
   }
 }

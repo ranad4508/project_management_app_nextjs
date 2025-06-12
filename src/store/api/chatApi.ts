@@ -1,270 +1,261 @@
-import {
-  createApi,
-  fetchBaseQuery,
-  BaseQueryFn,
-  FetchArgs,
-  FetchBaseQueryError,
-  FetchBaseQueryMeta,
-} from "@reduxjs/toolkit/query/react";
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import type { RootState } from "../index";
 import type {
-  CreateChatRoomData,
+  ChatRoom,
+  ChatMessage,
+  CreateRoomData,
+  UpdateRoomData,
   SendMessageData,
-  ChatRoomResponse,
-  ChatRoomsResponse,
-  MessagesResponse,
-  DecryptedMessage,
+  RoomListResponse,
+  MessageListResponse,
+  ReactionType,
 } from "@/src/types/chat.types";
 import type { ApiResponse, PaginationParams } from "@/src/types/api.types";
-
-interface ExtraOptions {
-  sessionKey?: string;
-}
-
-type CustomBaseQueryFn = BaseQueryFn<
-  string | FetchArgs,
-  unknown,
-  FetchBaseQueryError,
-  ExtraOptions,
-  FetchBaseQueryMeta
->;
 
 export const chatApi = createApi({
   reducerPath: "chatApi",
   baseQuery: fetchBaseQuery({
-    baseUrl: "/api",
-    credentials: "include",
-    prepareHeaders: (headers, api) => {
-      headers.set("Content-Type", "application/json");
-      const extraOptions = api.extraOptions as ExtraOptions;
-      if (extraOptions?.sessionKey) {
-        headers.set("x-session-key", extraOptions.sessionKey);
+    baseUrl: "/api/chat",
+    prepareHeaders: (headers, { getState }) => {
+      const token = (getState() as RootState).auth.token;
+      if (token) {
+        headers.set("authorization", `Bearer ${token}`);
       }
+      headers.set("Content-Type", "application/json");
       return headers;
     },
-  }) as CustomBaseQueryFn,
-  tagTypes: ["ChatRoom", "ChatMessage", "ChatParticipants"],
+  }),
+  tagTypes: ["ChatRoom", "ChatMessage", "RoomMembers"],
   endpoints: (builder) => ({
-    initializeUserEncryption: builder.mutation<
-      { success: boolean; data: any },
-      { password: string; sessionKey?: string }
+    // Room management
+    getUserRooms: builder.query<
+      ChatRoom[],
+      { workspaceId?: string } & Partial<PaginationParams>
     >({
-      query: ({ password }) => ({
-        url: "/encryption",
-        method: "POST",
-        body: { password },
-      }),
-      transformResponse: (response: ApiResponse<any>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to initialize encryption");
-        }
-        return {
-          success: response.success,
-          data: response.data,
-        };
-      },
-    }),
-    getWorkspaceChatRooms: builder.query<
-      ChatRoomsResponse,
-      { workspaceId: string; sessionKey?: string }
-    >({
-      query: ({ workspaceId }) => `/workspaces/${workspaceId}/rooms`,
-      providesTags: (result, error, { workspaceId }) => [
-        { type: "ChatRoom", id: `workspace-${workspaceId}` },
-      ],
-      transformResponse: (response: ApiResponse<ChatRoomsResponse>) => {
-        if (!response.success || !response.data) {
-          throw new Error(
-            response.error || "Failed to fetch workspace chat rooms"
-          );
-        }
-        return response.data;
-      },
-    }),
-    getChatRoomMessages: builder.query<
-      MessagesResponse,
-      { roomId: string; pagination?: PaginationParams; sessionKey?: string }
-    >({
-      query: ({ roomId, pagination = {} }) => {
+      query: ({ workspaceId, ...params }) => {
         const searchParams = new URLSearchParams();
-        if (pagination.limit)
-          searchParams.append("limit", pagination.limit.toString());
-        if (pagination.sortOrder)
-          searchParams.append("sortOrder", pagination.sortOrder);
-        return `/rooms/${roomId}/message${
-          searchParams.toString() ? `?${searchParams}` : ""
-        }`;
+        if (workspaceId) searchParams.append("workspaceId", workspaceId);
+        if (params.page) searchParams.append("page", params.page.toString());
+        if (params.limit) searchParams.append("limit", params.limit.toString());
+
+        return `rooms?${searchParams.toString()}`;
+      },
+      providesTags: ["ChatRoom"],
+      transformResponse: (response: ApiResponse<{ rooms: ChatRoom[] }>) => {
+        if (response.success && response.data) {
+          return response.data.rooms;
+        }
+        throw new Error(response.message || "Failed to fetch rooms");
+      },
+    }),
+
+    getRoomById: builder.query<ChatRoom, string>({
+      query: (roomId) => `rooms/${roomId}`,
+      providesTags: (result, error, roomId) => [
+        { type: "ChatRoom", id: roomId },
+      ],
+      transformResponse: (response: ApiResponse<ChatRoom>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to fetch room");
+      },
+    }),
+
+    createRoom: builder.mutation<ChatRoom, CreateRoomData>({
+      query: (data) => ({
+        url: "rooms",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["ChatRoom"],
+      transformResponse: (response: ApiResponse<ChatRoom>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to create room");
+      },
+    }),
+
+    updateRoom: builder.mutation<
+      ChatRoom,
+      { roomId: string; data: UpdateRoomData }
+    >({
+      query: ({ roomId, data }) => ({
+        url: `rooms/${roomId}`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { roomId }) => [
+        { type: "ChatRoom", id: roomId },
+        "ChatRoom",
+      ],
+      transformResponse: (response: ApiResponse<ChatRoom>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to update room");
+      },
+    }),
+
+    deleteRoom: builder.mutation<{ message: string }, string>({
+      query: (roomId) => ({
+        url: `rooms/${roomId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["ChatRoom"],
+      transformResponse: (response: ApiResponse<{ message: string }>) => {
+        if (response.success) {
+          return response.data || { message: "Room deleted successfully" };
+        }
+        throw new Error(response.message || "Failed to delete room");
+      },
+    }),
+
+    // Message management
+    getRoomMessages: builder.query<
+      MessageListResponse,
+      { roomId: string; page?: number; limit?: number }
+    >({
+      query: ({ roomId, page = 1, limit = 50 }) => {
+        const searchParams = new URLSearchParams();
+        searchParams.append("page", page.toString());
+        searchParams.append("limit", limit.toString());
+
+        return `rooms/${roomId}/messages?${searchParams.toString()}`;
       },
       providesTags: (result, error, { roomId }) => [
-        { type: "ChatMessage", id: `room-${roomId}` },
+        { type: "ChatMessage", id: roomId },
       ],
-      transformResponse: (response: ApiResponse<MessagesResponse>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to fetch messages");
+      transformResponse: (response: ApiResponse<MessageListResponse>) => {
+        if (response.success && response.data) {
+          return response.data;
         }
-        return response.data;
+        throw new Error(response.message || "Failed to fetch messages");
       },
     }),
-    sendMessage: builder.mutation<
-      DecryptedMessage,
-      SendMessageData & { sessionKey?: string }
-    >({
-      query: ({ sessionKey, roomId, ...data }) => ({
-        url: `/rooms/${roomId}/message`,
+
+    sendMessage: builder.mutation<ChatMessage, SendMessageData>({
+      query: (data) => ({
+        url: "rooms/messages",
         method: "POST",
         body: data,
       }),
       invalidatesTags: (result, error, { roomId }) => [
-        { type: "ChatMessage", id: `room-${roomId}` },
-        { type: "ChatRoom", id: roomId },
+        { type: "ChatMessage", id: roomId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to send message");
+      transformResponse: (response: ApiResponse<ChatMessage>) => {
+        if (response.success && response.data) {
+          return response.data;
         }
-        return response.data;
+        throw new Error(response.message || "Failed to send message");
       },
     }),
-    createChatRoom: builder.mutation<
-      ChatRoomResponse,
-      { data: CreateChatRoomData; sessionKey?: string; workspaceId: string }
-    >({
-      query: ({ data, workspaceId }) => ({
-        url: `/workspaces/${workspaceId}/rooms`,
-        method: "POST",
-        body: data,
-      }),
-      invalidatesTags: ["ChatRoom"],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to create chat room");
-        }
-        return response.data;
-      },
-    }),
-    ensureWorkspaceGeneralRoom: builder.mutation<
-      ChatRoomResponse,
-      { workspaceId: string; sessionKey?: string }
-    >({
-      query: ({ workspaceId }) => ({
-        url: `/workspaces/${workspaceId}/general`,
-        method: "POST",
-      }),
-      invalidatesTags: ["ChatRoom"],
-      transformResponse: (response: ApiResponse<ChatRoomResponse>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to ensure general room");
-        }
-        return response.data;
-      },
-    }),
+
+    // Reactions
     addReaction: builder.mutation<
-      DecryptedMessage,
-      {
-        messageId: string;
-        type: string;
-        emoji?: string;
-        roomId: string;
-        sessionKey?: string;
-      }
+      ChatMessage,
+      { messageId: string; type: ReactionType }
     >({
-      query: ({ sessionKey, roomId, messageId, type, emoji }) => ({
-        url: `/rooms/${roomId}/message/${messageId}/reactions/${type}`,
+      query: ({ messageId, type }) => ({
+        url: `messages/${messageId}/reactions`,
         method: "POST",
-        body: { emoji },
+        body: { type },
       }),
       invalidatesTags: (result, error, { messageId }) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to add reaction");
+      transformResponse: (response: ApiResponse<ChatMessage>) => {
+        if (response.success && response.data) {
+          return response.data;
         }
-        return response.data;
+        throw new Error(response.message || "Failed to add reaction");
       },
     }),
+
     removeReaction: builder.mutation<
-      DecryptedMessage,
-      {
-        messageId: string;
-        reactionType: string;
-        roomId: string;
-        sessionKey?: string;
-      }
+      ChatMessage,
+      { messageId: string; reactionId: string }
     >({
-      query: ({ sessionKey, roomId, messageId, reactionType }) => ({
-        url: `/rooms/${roomId}/message/${messageId}/reactions/${reactionType}`,
+      query: ({ messageId, reactionId }) => ({
+        url: `messages/${messageId}/reactions/${reactionId}`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, { messageId }) => [
         { type: "ChatMessage", id: messageId },
       ],
-      transformResponse: (response: ApiResponse<DecryptedMessage>) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to remove reaction");
+      transformResponse: (response: ApiResponse<ChatMessage>) => {
+        if (response.success && response.data) {
+          return response.data;
         }
-        return response.data;
+        throw new Error(response.message || "Failed to remove reaction");
       },
     }),
-    deleteMessage: builder.mutation<
-      { success: boolean; message: string },
-      { messageId: string; roomId: string; sessionKey?: string }
+
+    // Room invitations
+    inviteToRoom: builder.mutation<
+      { message: string },
+      { roomId: string; userId: string }
     >({
-      query: ({ roomId, messageId }) => ({
-        url: `/rooms/${roomId}/message/${messageId}`,
-        method: "DELETE",
+      query: ({ roomId, userId }) => ({
+        url: `rooms/${roomId}/invite`,
+        method: "POST",
+        body: { userId },
       }),
-      invalidatesTags: (result, error, { messageId }) => [
-        { type: "ChatMessage", id: messageId },
-        { type: "ChatRoom" },
+      invalidatesTags: (result, error, { roomId }) => [
+        { type: "RoomMembers", id: roomId },
       ],
-      transformResponse: (
-        response: ApiResponse<{ success: boolean; message?: string }>
-      ) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to delete message");
+      transformResponse: (response: ApiResponse<{ message: string }>) => {
+        if (response.success) {
+          return response.data || { message: "User invited successfully" };
         }
-        return {
-          success: response.data.success,
-          message: response.data.message || "Message deleted",
-        };
+        throw new Error(response.message || "Failed to invite user");
       },
     }),
-    markMessageAsRead: builder.mutation<
-      { success: boolean; message: string },
-      { messageId: string; roomId: string; sessionKey?: string }
-    >({
-      query: ({ roomId, messageId }) => ({
-        url: `/rooms/${roomId}/message/${messageId}/read`,
+
+    acceptRoomInvitation: builder.mutation<{ message: string }, string>({
+      query: (invitationId) => ({
+        url: `invitations/${invitationId}/accept`,
         method: "POST",
       }),
-      invalidatesTags: (result, error, { messageId }) => [
-        { type: "ChatMessage", id: messageId },
-        { type: "ChatRoom" },
-      ],
-      transformResponse: (
-        response: ApiResponse<{ success: boolean; message?: string }>
-      ) => {
-        if (!response.success || !response.data) {
-          throw new Error(response.error || "Failed to mark message as read");
+      invalidatesTags: ["ChatRoom"],
+      transformResponse: (response: ApiResponse<{ message: string }>) => {
+        if (response.success) {
+          return (
+            response.data || { message: "Invitation accepted successfully" }
+          );
         }
-        return {
-          success: response.data.success,
-          message: response.data.message || "Message marked as read",
-        };
+        throw new Error(response.message || "Failed to accept invitation");
+      },
+    }),
+
+    // Utility
+    updateLastRead: builder.mutation<{ message: string }, string>({
+      query: (roomId) => ({
+        url: `rooms/${roomId}/read`,
+        method: "PUT",
+      }),
+      transformResponse: (response: ApiResponse<{ message: string }>) => {
+        if (response.success) {
+          return response.data || { message: "Last read updated successfully" };
+        }
+        throw new Error(response.message || "Failed to update last read");
       },
     }),
   }),
 });
 
 export const {
-  useInitializeUserEncryptionMutation,
-  useGetWorkspaceChatRoomsQuery,
-  useGetChatRoomMessagesQuery,
+  useGetUserRoomsQuery,
+  useGetRoomByIdQuery,
+  useCreateRoomMutation,
+  useUpdateRoomMutation,
+  useDeleteRoomMutation,
+  useGetRoomMessagesQuery,
   useSendMessageMutation,
-  useCreateChatRoomMutation,
-  useEnsureWorkspaceGeneralRoomMutation,
   useAddReactionMutation,
   useRemoveReactionMutation,
-  useDeleteMessageMutation,
-  useMarkMessageAsReadMutation,
+  useInviteToRoomMutation,
+  useAcceptRoomInvitationMutation,
+  useUpdateLastReadMutation,
 } = chatApi;

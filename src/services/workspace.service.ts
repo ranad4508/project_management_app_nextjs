@@ -3,6 +3,7 @@ import { User } from "@/src/models/user";
 import { Invitation } from "@/src/models/invitation";
 import { Project } from "@/src/models/project";
 import { Task } from "@/src/models/task";
+import { ChatService } from "./chat.service";
 import { StringUtils } from "@/src/utils/string.utils";
 import { EncryptionUtils } from "@/src/utils/crypto.utils";
 import { DateUtils } from "@/src/utils/date.utils";
@@ -17,6 +18,7 @@ import {
 import { WorkspaceStatus } from "@/src/enums/workspace.enum";
 import { MemberRole } from "@/src/enums/user.enum";
 import { InvitationStatus } from "@/src/enums/invitation.enum";
+import { RoomType } from "@/src/types/chat.types";
 import type {
   CreateWorkspaceData,
   UpdateWorkspaceData,
@@ -27,87 +29,12 @@ import type { PaginationParams } from "@/src/types/api.types";
 export class WorkspaceService {
   private emailService: EmailService;
   private notificationService: NotificationService;
+  private chatService: ChatService;
 
   constructor() {
     this.emailService = new EmailService();
     this.notificationService = new NotificationService();
-  }
-
-  /**
-   * Accept invitation
-   */
-  async acceptInvitation(token: string, userId?: string) {
-    const invitation = await Invitation.findOne({
-      token,
-      status: InvitationStatus.PENDING,
-    }).populate("workspace");
-
-    if (!invitation || invitation.isExpired()) {
-      throw new ValidationError("Invalid or expired invitation");
-    }
-
-    const workspace = invitation.workspace as any;
-
-    // If user is logged in, check email match and add to workspace
-    if (userId) {
-      const user = await User.findById(userId);
-      if (!user) {
-        throw new NotFoundError("User not found");
-      }
-
-      if (user.email !== invitation.email) {
-        throw new ValidationError(
-          "Invitation email does not match your account"
-        );
-      }
-
-      // Check if user is already a member
-      if (workspace.isMember(userId)) {
-        throw new ConflictError("You are already a member of this workspace");
-      }
-
-      // Add user to workspace
-      workspace.members.push({
-        user: userId,
-        role: invitation.role,
-        joinedAt: new Date(),
-        permissions: [],
-      });
-
-      await workspace.save();
-
-      // Update invitation status
-      invitation.status = InvitationStatus.ACCEPTED;
-      invitation.acceptedAt = new Date();
-      await invitation.save();
-
-      // Send notification to workspace admins
-      try {
-        await this.notificationService.notifyWorkspaceAdmins(
-          workspace._id,
-          `${user.name} joined the workspace`,
-          `${user.name} has accepted the invitation and joined ${workspace.name}`
-        );
-      } catch (error) {
-        console.error("Failed to send notification:", error);
-        // Don't fail the invitation acceptance if notification fails
-      }
-
-      return {
-        message: "Invitation accepted successfully",
-        workspace: workspace._id.toString(),
-      };
-    }
-
-    // Return invitation details for registration
-    return {
-      invitation: {
-        email: invitation.email,
-        workspaceName: workspace.name,
-        role: invitation.role,
-        token,
-      },
-    };
+    this.chatService = new ChatService();
   }
 
   /**
@@ -143,6 +70,25 @@ export class WorkspaceService {
     });
 
     await workspace.save();
+
+    // Automatically create general chat room with E2E encryption
+    try {
+      console.log(`Creating general room for workspace: ${workspace._id}`);
+      await this.chatService.createRoom(userId, {
+        name: "General",
+        description: "General discussion for all workspace members",
+        type: RoomType.GENERAL,
+        workspaceId: workspace._id.toString(),
+        isEncrypted: true, // Enable E2E encryption by default
+      });
+      console.log(
+        `General room created successfully for workspace: ${workspace._id}`
+      );
+    } catch (error) {
+      console.error("Failed to create general chat room:", error);
+      // Don't fail workspace creation if chat room creation fails
+    }
+
     await workspace.populate([
       { path: "owner", select: "name email avatar" },
       { path: "members.user", select: "name email avatar" },
@@ -154,6 +100,154 @@ export class WorkspaceService {
     return {
       ...workspace.toObject(),
       stats,
+    };
+  }
+
+  /**
+   * Add member to workspace and general chat room
+   */
+  async addMemberToWorkspace(
+    workspaceId: string,
+    userId: string,
+    role: MemberRole = MemberRole.MEMBER
+  ) {
+    const workspace = await Workspace.findById(workspaceId);
+    if (!workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    // Check if user is already a member
+    if (workspace.isMember(userId)) {
+      console.log(
+        `User ${userId} is already a member of workspace ${workspaceId}`
+      );
+      return workspace;
+    }
+
+    // Add member to workspace
+    workspace.members.push({
+      user: userId as any,
+      role,
+      joinedAt: new Date(),
+    });
+
+    await workspace.save();
+
+    // Add member to general room
+    try {
+      await this.addMemberToGeneralRoom(workspaceId, userId);
+    } catch (error) {
+      console.error("Failed to add user to general chat room:", error);
+    }
+
+    return workspace;
+  }
+
+  /**
+   * Add member to general chat room
+   */
+  private async addMemberToGeneralRoom(workspaceId: string, userId: string) {
+    try {
+      // Find the general room for this workspace
+      const { ChatRoom } = await import("@/src/models/chat-room");
+      const generalRoom = await ChatRoom.findOne({
+        workspace: workspaceId,
+        type: RoomType.GENERAL,
+      });
+
+      if (generalRoom) {
+        // Check if user is already a member
+        const isAlreadyMember = generalRoom.members.some(
+          (member: any) => member.user.toString() === userId
+        );
+
+        if (!isAlreadyMember) {
+          // Add user to general room members
+          generalRoom.members.push({
+            user: userId,
+            role: MemberRole.MEMBER,
+            joinedAt: new Date(),
+          });
+          await generalRoom.save();
+          console.log(
+            `Added user ${userId} to general room ${generalRoom._id}`
+          );
+        }
+      } else {
+        console.warn(`General room not found for workspace ${workspaceId}`);
+      }
+    } catch (error) {
+      console.error("Error adding member to general room:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Accept invitation
+   */
+  async acceptInvitation(token: string, userId?: string) {
+    const invitation = await Invitation.findOne({
+      token,
+      status: InvitationStatus.PENDING,
+    }).populate("workspace");
+
+    if (!invitation || invitation.isExpired()) {
+      throw new ValidationError("Invalid or expired invitation");
+    }
+
+    const workspace = invitation.workspace as any;
+
+    // If user is logged in, check email match and add to workspace
+    if (userId) {
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new NotFoundError("User not found");
+      }
+
+      if (user.email !== invitation.email) {
+        throw new ValidationError(
+          "Invitation email does not match your account"
+        );
+      }
+
+      // Add user to workspace and general room
+      await this.addMemberToWorkspace(
+        workspace._id.toString(),
+        userId,
+        invitation.role
+      );
+
+      // Update invitation status
+      invitation.status = InvitationStatus.ACCEPTED;
+      invitation.acceptedAt = new Date();
+      await invitation.save();
+
+      // Send notification to workspace admins
+      try {
+        await this.notificationService.notifyWorkspaceAdmins(
+          workspace._id,
+          `${user.name} joined the workspace`,
+          `${user.name} has accepted the invitation and joined ${workspace.name}`
+        );
+      } catch (error) {
+        console.error("Failed to send notification:", error);
+        // Don't fail the invitation acceptance if notification fails
+      }
+
+      return {
+        message: "Invitation accepted successfully",
+        workspace: workspace._id.toString(),
+      };
+    }
+
+    // Return invitation details for registration
+    return {
+      invitation: {
+        email: invitation.email,
+        workspaceName: workspace.name,
+        role: invitation.role,
+        token,
+      },
     };
   }
 
@@ -229,7 +323,7 @@ export class WorkspaceService {
     // Get workspace statistics
     const stats = await this.getWorkspaceStats(workspaceId);
 
-    // Get recent projects - Fix: populate 'members' instead of 'assignedTo'
+    // Get recent projects
     const projects = await Project.find({ workspace: workspaceId })
       .populate("members", "name email avatar")
       .populate("createdBy", "name email avatar")
@@ -253,7 +347,7 @@ export class WorkspaceService {
           priority: project.priority,
           tasksCount: totalTasks,
           completedTasks,
-          assignedTo: project.members || [], // Map members to assignedTo for compatibility
+          assignedTo: project.members || [],
           dueDate: project.dueDate,
           stats: {
             completionPercentage:
@@ -443,12 +537,13 @@ export class WorkspaceService {
     // Get inviter details
     const inviter = await User.findById(inviterId);
 
-    // Send invitation email
-    await this.emailService.sendTeamInvitationEmail(
+    // Send invitation email with chat access information
+    await this.emailService.sendWorkspaceInvitationWithChatEmail(
       email,
       inviter!.name,
       workspace.name,
-      token
+      token,
+      message
     );
 
     return { message: "Invitation sent successfully" };
@@ -546,6 +641,19 @@ export class WorkspaceService {
     );
 
     await workspace.save();
+
+    // Remove from all chat rooms in the workspace
+    try {
+      const rooms = await this.chatService.getUserRooms(memberId, workspaceId);
+      for (const room of rooms) {
+        const { ChatRoom } = await import("@/src/models/chat-room");
+        await ChatRoom.findByIdAndUpdate(room._id, {
+          $pull: { members: { user: memberId } },
+        });
+      }
+    } catch (error) {
+      console.error("Failed to remove user from chat rooms:", error);
+    }
 
     return { message: "Member removed successfully" };
   }
