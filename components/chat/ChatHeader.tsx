@@ -60,7 +60,6 @@ export function ChatHeader({ room }: ChatHeaderProps) {
     room.members.find((m) => m.user._id === currentUser?.id)?.role ===
     MemberRole.ADMIN;
   const isOwner = room.createdBy._id === currentUser?.id;
-  const canInvite = (isAdmin || isOwner) && room.type === "private";
 
   return (
     <>
@@ -123,19 +122,6 @@ export function ChatHeader({ room }: ChatHeaderProps) {
             </span>
           </div>
 
-          {/* Quick invite button for private rooms */}
-          {canInvite && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowInvite(true)}
-              className="h-8 px-3"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Invite
-            </Button>
-          )}
-
           {/* Room actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -149,7 +135,7 @@ export function ChatHeader({ room }: ChatHeaderProps) {
                 View Members ({room.members.length})
               </DropdownMenuItem>
 
-              {canInvite && (
+              {room.type === "private" && (isAdmin || isOwner) && (
                 <DropdownMenuItem onClick={() => setShowInvite(true)}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   Invite Members

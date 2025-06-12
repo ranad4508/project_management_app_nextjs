@@ -97,20 +97,26 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
       console.log("🔌 Attempting to connect to Socket.IO server...");
 
       try {
-        // Initialize socket connection to the same origin
+        // Get the auth token from session or localStorage
+        const token = session.user || localStorage.getItem("token");
+
+        if (!token) {
+          console.error("❌ No authentication token available");
+          return;
+        }
+
+        // Initialize socket connection
         const socket = io(window.location.origin, {
           transports: ["websocket", "polling"],
           timeout: 20000,
           forceNew: true,
           autoConnect: true,
+          auth: {
+            token: token,
+          },
         });
 
         socketRef.current = socket;
-
-        // Store user info on socket
-        socket.userId = session.user.id;
-        socket.userName = session.user.name;
-        socket.userAvatar = session.user.image;
 
         // Connection events
         socket.on("connect", () => {
@@ -126,7 +132,7 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
           }
         });
 
-        socket.on("disconnect", (reason: string) => {
+        socket.on("disconnect", (reason: any) => {
           console.log("❌ Disconnected from chat server:", reason);
           setIsConnected(false);
           dispatch(setConnected(false));
@@ -153,7 +159,7 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
         });
 
         socket.on("connect_error", (error: any) => {
-          console.error("❌ Socket connection error:", error);
+          console.error("❌ Socket connection error:", error.message);
           setIsConnected(false);
           dispatch(setConnected(false));
 
@@ -171,8 +177,9 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
           }
         });
 
+        // Rest of the event handlers remain the same...
         // Message events
-        socket.on("message:new", (message: ChatMessage) => {
+        socket.on("message:new", (message: any) => {
           console.log("📨 New message received:", message);
           dispatch(addMessage(message));
         });
