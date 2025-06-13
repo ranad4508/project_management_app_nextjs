@@ -98,7 +98,8 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
 
       try {
         // Get the auth token from session or localStorage
-        const token = session.user || localStorage.getItem("token");
+        const token =
+          (session as any)?.accessToken || localStorage.getItem("token");
 
         if (!token) {
           console.error("❌ No authentication token available");
@@ -132,7 +133,7 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
           }
         });
 
-        socket.on("disconnect", (reason: any) => {
+        socket.on("disconnect", (reason: string) => {
           console.log("❌ Disconnected from chat server:", reason);
           setIsConnected(false);
           dispatch(setConnected(false));
@@ -158,7 +159,7 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
           }
         });
 
-        socket.on("connect_error", (error: any) => {
+        socket.on("connect_error", (error: Error) => {
           console.error("❌ Socket connection error:", error.message);
           setIsConnected(false);
           dispatch(setConnected(false));
@@ -179,7 +180,7 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
 
         // Rest of the event handlers remain the same...
         // Message events
-        socket.on("message:new", (message: any) => {
+        socket.on("message:new", (message: ChatMessage) => {
           console.log("📨 New message received:", message);
           dispatch(addMessage(message));
         });

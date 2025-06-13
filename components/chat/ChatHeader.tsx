@@ -16,6 +16,7 @@ import {
 import { ViewMembersDialog } from "./ViewMembersDialog";
 import { RoomSettingsDialog } from "./RoomSettingsDialog";
 import { InviteToRoomDialog } from "./InviteToRoomDialog";
+import { EncryptionStatus } from "./EncryptionStatus";
 import {
   Menu,
   Hash,
@@ -24,7 +25,6 @@ import {
   Settings,
   UserPlus,
   MoreVertical,
-  Plus,
 } from "lucide-react";
 import { selectOnlineUsersInRoom } from "@/src/store/slices/chatSlice";
 import type { ChatRoom } from "@/src/types/chat.types";
@@ -37,7 +37,9 @@ interface ChatHeaderProps {
 
 export function ChatHeader({ room }: ChatHeaderProps) {
   const dispatch = useDispatch();
-  const { isSidebarOpen } = useSelector((state: RootState) => state.chat);
+  const { isSidebarOpen, isConnected } = useSelector(
+    (state: RootState) => state.chat
+  );
   const { user: currentUser } = useSelector((state: RootState) => state.auth);
   const onlineUsers = useSelector(selectOnlineUsersInRoom(room._id));
 
@@ -86,12 +88,8 @@ export function ChatHeader({ room }: ChatHeaderProps) {
             </div>
           </div>
 
-          {room.isEncrypted && (
-            <Badge variant="secondary" className="text-xs">
-              <Lock className="mr-1 h-3 w-3" />
-              Encrypted
-            </Badge>
-          )}
+          {/* 🔒 Add Encryption Status Here */}
+          <EncryptionStatus room={room} isConnected={isConnected} />
 
           {room.type === "private" && (
             <Badge variant="outline" className="text-xs">

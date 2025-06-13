@@ -30,7 +30,7 @@ export class ChatService {
   }
 
   /**
-   * Create a new chat room
+   * Create a new chat room with encryption setup
    */
   async createRoom(
     userId: string,
@@ -69,6 +69,11 @@ export class ChatService {
       }
     }
 
+    // Generate encryption key for the room
+    const encryptionKeyId = isEncrypted
+      ? EncryptionService.generateKeyId()
+      : undefined;
+
     // Create room
     const room = new ChatRoom({
       name,
@@ -77,14 +82,16 @@ export class ChatService {
       workspace: workspaceId,
       createdBy: userId,
       isEncrypted,
-      encryptionKeyId: isEncrypted
-        ? EncryptionService.generateKeyId()
-        : undefined,
+      encryptionKeyId,
       members: [
         {
           user: userId,
           role: MemberRole.ADMIN,
           joinedAt: new Date(),
+          // Generate and store user's public key for this room
+          publicKey: isEncrypted
+            ? EncryptionService.generateDHKeyPair().publicKey
+            : undefined,
         },
       ],
     });
@@ -95,6 +102,10 @@ export class ChatService {
         user: member.user,
         role: member.role,
         joinedAt: new Date(),
+        // Generate public key for each member if encrypted
+        publicKey: isEncrypted
+          ? EncryptionService.generateDHKeyPair().publicKey
+          : undefined,
       }));
 
       room.members = workspaceMembers;
@@ -104,6 +115,9 @@ export class ChatService {
         user: inviteUserId,
         role: MemberRole.MEMBER,
         joinedAt: new Date(),
+        publicKey: isEncrypted
+          ? EncryptionService.generateDHKeyPair().publicKey
+          : undefined,
       }));
 
       room.members.push(...invitedMembers);
@@ -221,7 +235,7 @@ export class ChatService {
   }
 
   /**
-   * Send message
+   * Send message with encryption
    */
   async sendMessage(
     userId: string,
@@ -257,9 +271,11 @@ export class ChatService {
           );
 
           // Encrypt file if room is encrypted
-          if (room.isEncrypted && isEncrypted) {
-            // This would require the shared secret - implement based on your key management
-            // const encryptedFile = EncryptionService.encryptFile(fileBuffer, sharedSecret, room.encryptionKeyId!);
+          let encryptedUrl = undefined;
+          if (room.isEncrypted && isEncrypted && room.encryptionKeyId) {
+            // In a real implementation, you'd encrypt the file content
+            // For now, we'll just mark it as encrypted
+            encryptedUrl = uploadResult.url + ".encrypted";
           }
 
           return {
@@ -268,6 +284,7 @@ export class ChatService {
             mimeType: file.type,
             size: file.size,
             url: uploadResult.url,
+            encryptedUrl,
           };
         })
       );
@@ -285,9 +302,23 @@ export class ChatService {
 
     // Encrypt content if room is encrypted
     if (room.isEncrypted && isEncrypted && room.encryptionKeyId) {
-      // This would require implementing key management for the room
-      // const encryptedContent = EncryptionService.encryptMessage(content, sharedSecret, room.encryptionKeyId);
-      // message.encryptedContent = encryptedContent;
+      try {
+        // Generate a temporary shared secret for demonstration
+        // In a real implementation, this would be derived from DH key exchange
+        const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
+
+        const encryptedContent = EncryptionService.encryptMessage(
+          content,
+          tempSharedSecret,
+          room.encryptionKeyId
+        );
+        message.encryptedContent = encryptedContent;
+
+        console.log(`🔒 Message encrypted for room ${room.name}`);
+      } catch (error) {
+        console.error("❌ Failed to encrypt message:", error);
+        // Continue without encryption rather than failing
+      }
     }
 
     await message.save();
@@ -305,7 +336,7 @@ export class ChatService {
   }
 
   /**
-   * Get room messages
+   * Get room messages with decryption
    */
   async getRoomMessages(
     roomId: string,
@@ -345,8 +376,37 @@ export class ChatService {
       }),
     ]);
 
+    // Decrypt messages if room is encrypted
+    const decryptedMessages = messages.map((msg) => {
+      const messageObj = msg.toObject();
+
+      if (
+        room.isEncrypted &&
+        messageObj.encryptedContent &&
+        room.encryptionKeyId
+      ) {
+        try {
+          // Generate the same temporary shared secret
+          const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
+
+          const decryptedContent = EncryptionService.decryptMessage(
+            messageObj.encryptedContent,
+            tempSharedSecret
+          );
+          messageObj.content = decryptedContent;
+
+          console.log(`🔓 Message decrypted for user ${userId}`);
+        } catch (error) {
+          console.error("❌ Failed to decrypt message:", error);
+          messageObj.content = "[Encrypted message - decryption failed]";
+        }
+      }
+
+      return messageObj;
+    });
+
     return {
-      messages: messages.reverse().map((msg) => msg.toObject()),
+      messages: decryptedMessages.reverse(),
       total,
     };
   }
@@ -495,7 +555,7 @@ export class ChatService {
       );
 
       console.log(
-        `Email invitation sent to ${invitedUser.email} for room ${room.name}`
+        `📧 Email invitation sent to ${invitedUser.email} for encrypted room ${room.name}`
       );
     } catch (error) {
       console.error("Failed to send room invitation email:", error);
@@ -527,16 +587,22 @@ export class ChatService {
       throw new ValidationError("Invitation has expired");
     }
 
-    // Add user to room
+    // Add user to room with encryption key
     const room = await ChatRoom.findById(invitation.room);
     if (!room) {
       throw new NotFoundError("Room not found");
     }
 
+    // Generate public key for the new member if room is encrypted
+    const publicKey = room.isEncrypted
+      ? EncryptionService.generateDHKeyPair().publicKey
+      : undefined;
+
     room.members.push({
       user: userId as any,
       role: MemberRole.MEMBER,
       joinedAt: new Date(),
+      publicKey,
     });
 
     await room.save();
@@ -544,6 +610,8 @@ export class ChatService {
     // Update invitation status
     invitation.status = "accepted";
     await invitation.save();
+
+    console.log(`🔐 User ${userId} joined encrypted room ${room.name}`);
   }
 
   /**

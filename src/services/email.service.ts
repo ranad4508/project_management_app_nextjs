@@ -26,7 +26,7 @@ export class EmailService {
   ): Promise<void> {
     try {
       await this.transporter.sendMail({
-        from: `"TaskFlow" <${process.env.EMAIL_FROM}>`,
+        from: `"WorkSphere" <${process.env.EMAIL_FROM}>`,
         to,
         subject,
         html,
@@ -46,13 +46,13 @@ export class EmailService {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #6d28d9; margin: 0;">Welcome to TaskFlow!</h1>
+          <h1 style="color: #6d28d9; margin: 0;">Welcome to WorkSphere!</h1>
         </div>
         
         <div style="background-color: #f8fafc; padding: 30px; border-radius: 8px; margin-bottom: 30px;">
           <h2 style="color: #1f2937; margin-top: 0;">Verify Your Email Address</h2>
           <p style="color: #4b5563; line-height: 1.6;">
-            Thank you for registering with TaskFlow. To complete your registration and start using our platform, 
+            Thank you for registering with WorkSphere. To complete your registration and start using our platform, 
             please verify your email address by clicking the button below.
           </p>
           
@@ -73,10 +73,10 @@ export class EmailService {
         
         <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; color: #6b7280; font-size: 14px;">
           <p><strong>Important:</strong> This verification link will expire in 24 hours.</p>
-          <p>If you didn't create an account with TaskFlow, you can safely ignore this email.</p>
+          <p>If you didn't create an account with WorkSphere, you can safely ignore this email.</p>
           <p style="margin-bottom: 0;">
             Best regards,<br>
-            The TaskFlow Team
+            The WorkSphere Team
           </p>
         </div>
       </div>
@@ -94,7 +94,7 @@ export class EmailService {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #6d28d9; margin: 0;">TaskFlow</h1>
+          <h1 style="color: #6d28d9; margin: 0;">WorkSphere</h1>
         </div>
         
         <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; margin-bottom: 30px;">
@@ -125,10 +125,10 @@ export class EmailService {
         </div>
         
         <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; color: #6b7280; font-size: 14px;">
-          <p><strong>Security tip:</strong> Never share your password with anyone. TaskFlow will never ask for your password via email.</p>
+          <p><strong>Security tip:</strong> Never share your password with anyone. WorkSphere will never ask for your password via email.</p>
           <p style="margin-bottom: 0;">
             Best regards,<br>
-            The TaskFlow Team
+            The WorkSphere Team
           </p>
         </div>
       </div>
@@ -147,7 +147,7 @@ export class EmailService {
     token: string,
     customMessage?: string
   ) {
-    const inviteUrl = `${process.env.FRONTEND_URL}/invite/${token}`;
+    const inviteUrl = `${process.env.FRONTEND_URL}/invite?token=${token}`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -259,7 +259,7 @@ export class EmailService {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #6d28d9; margin: 0;">TaskFlow</h1>
+          <h1 style="color: #6d28d9; margin: 0;">WorkSphere</h1>
         </div>
         
         <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin-bottom: 30px;">
@@ -290,7 +290,7 @@ export class EmailService {
           <p><strong>Security Notice:</strong> If you didn't request this code, please secure your account immediately by changing your password.</p>
           <p style="margin-bottom: 0;">
             Best regards,<br>
-            The TaskFlow Team
+            The WorkSphere Team
           </p>
         </div>
       </div>

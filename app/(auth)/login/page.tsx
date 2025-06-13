@@ -1,34 +1,41 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { signIn } from "next-auth/react"
-import { z } from "zod"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(1, "Password is required"),
   mfaCode: z.string().optional(),
-})
+});
 
-type LoginFormValues = z.infer<typeof loginSchema>
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard"
-  const [error, setError] = useState<string | null>(null)
-  const [requiresMfa, setRequiresMfa] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const [error, setError] = useState<string | null>(null);
+  const [requiresMfa, setRequiresMfa] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const {
     register,
@@ -41,11 +48,11 @@ export default function LoginPage() {
       password: "",
       mfaCode: "",
     },
-  })
+  });
 
   const onSubmit = async (data: LoginFormValues) => {
-    setIsLoading(true)
-    setError(null)
+    setIsLoading(true);
+    setError(null);
 
     try {
       const result = await signIn("credentials", {
@@ -53,23 +60,23 @@ export default function LoginPage() {
         email: data.email,
         password: data.password,
         mfaCode: data.mfaCode,
-      })
+      });
 
       if (result?.error) {
         if (result.error === "MFA_REQUIRED") {
-          setRequiresMfa(true)
+          setRequiresMfa(true);
         } else {
-          setError(result.error)
+          setError(result.error);
         }
       } else {
-        router.push(callbackUrl)
+        router.push(callbackUrl);
       }
     } catch (err) {
-      setError("An unexpected error occurred. Please try again.")
+      setError("An unexpected error occurred. Please try again.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -80,7 +87,9 @@ export default function LoginPage() {
               W
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-center">Sign in to your account</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            Sign in to your account
+          </CardTitle>
           <CardDescription className="text-center">
             Enter your email and password to access your account
           </CardDescription>
@@ -103,7 +112,9 @@ export default function LoginPage() {
                 {...register("email")}
                 disabled={isLoading || requiresMfa}
               />
-              {errors.email && <p className="text-sm text-red-500">{errors.email.message}</p>}
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -123,7 +134,11 @@ export default function LoginPage() {
                 {...register("password")}
                 disabled={isLoading || requiresMfa}
               />
-              {errors.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
+              {errors.password && (
+                <p className="text-sm text-red-500">
+                  {errors.password.message}
+                </p>
+              )}
             </div>
 
             {requiresMfa && (
@@ -137,7 +152,11 @@ export default function LoginPage() {
                   disabled={isLoading}
                   autoFocus
                 />
-                {errors.mfaCode && <p className="text-sm text-red-500">{errors.mfaCode.message}</p>}
+                {errors.mfaCode && (
+                  <p className="text-sm text-red-500">
+                    {errors.mfaCode.message}
+                  </p>
+                )}
               </div>
             )}
 
@@ -150,12 +169,15 @@ export default function LoginPage() {
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-center text-sm">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="font-medium text-violet-600 hover:text-violet-500 dark:text-violet-400">
+            <Link
+              href="/register"
+              className="font-medium text-violet-600 hover:text-violet-500 dark:text-violet-400"
+            >
               Sign up
             </Link>
           </div>
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }

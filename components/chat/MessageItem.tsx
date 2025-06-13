@@ -14,7 +14,7 @@ import {
 import { MessageReactions } from "./MessageReactions";
 import { MessageAttachments } from "./MessageAttachments";
 import { useSocket } from "./SocketProvider";
-import { MoreHorizontal, Reply, Edit, Trash2 } from "lucide-react";
+import { MoreHorizontal, Reply, Edit, Trash2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/src/types/chat.types";
 import type { RootState } from "@/src/store";
@@ -22,9 +22,14 @@ import type { RootState } from "@/src/store";
 interface MessageItemProps {
   message: ChatMessage;
   showAvatar: boolean;
+  isEncrypted?: boolean;
 }
 
-export function MessageItem({ message, showAvatar }: MessageItemProps) {
+export function MessageItem({
+  message,
+  showAvatar,
+  isEncrypted = false,
+}: MessageItemProps) {
   const { addReaction } = useSocket();
   const [showReactions, setShowReactions] = useState(false);
 
@@ -53,6 +58,18 @@ export function MessageItem({ message, showAvatar }: MessageItemProps) {
         day: "numeric",
       });
     }
+  };
+
+  // Type guard to check if replyTo is a populated message object
+  const isPopulatedReplyTo = (
+    replyTo: string | ChatMessage | undefined
+  ): replyTo is ChatMessage => {
+    return (
+      typeof replyTo === "object" &&
+      replyTo !== null &&
+      "sender" in replyTo &&
+      "content" in replyTo
+    );
   };
 
   return (
@@ -86,6 +103,7 @@ export function MessageItem({ message, showAvatar }: MessageItemProps) {
             <span className="text-xs text-muted-foreground">
               {formatMessageTime(message.createdAt)}
             </span>
+
             {message.editedAt && (
               <Badge variant="secondary" className="text-xs">
                 edited
@@ -95,7 +113,7 @@ export function MessageItem({ message, showAvatar }: MessageItemProps) {
         )}
 
         {/* Reply indicator */}
-        {message.replyTo && typeof message.replyTo === "object" && (
+        {message.replyTo && isPopulatedReplyTo(message.replyTo) && (
           <div className="mb-2 pl-3 border-l-2 border-muted">
             <div className="text-xs text-muted-foreground">
               <span className="font-medium">{message.replyTo.sender.name}</span>

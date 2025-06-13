@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EncryptionStatus } from "./EncryptionStatus";
 import { Hash, Lock, Users, MoreHorizontal, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -27,7 +28,7 @@ interface ChatSidebarProps {
 
 export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
   const dispatch = useDispatch();
-  const { activeRoomId, onlineUsers } = useSelector(
+  const { activeRoomId, onlineUsers, isConnected } = useSelector(
     (state: RootState) => state.chat
   );
   const { user: currentUser } = useSelector((state: RootState) => state.auth);
@@ -106,6 +107,14 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
                             {unreadCount > 99 ? "99+" : unreadCount}
                           </Badge>
                         )}
+                      </div>
+
+                      {/* 🔒 Add Encryption Status in Sidebar */}
+                      <div className="flex items-center space-x-2 mt-1">
+                        <EncryptionStatus
+                          room={room}
+                          isConnected={isConnected}
+                        />
                       </div>
 
                       {room.lastMessage && (

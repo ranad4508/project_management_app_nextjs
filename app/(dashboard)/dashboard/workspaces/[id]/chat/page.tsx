@@ -10,6 +10,7 @@ import { ChatWindow } from "@/components/chat/ChatWindow";
 import { CreateRoomDialog } from "@/components/chat/CreateRoomDialog";
 import { QuickInviteButton } from "@/components/chat/QuickInviteButton";
 import { SocketProvider } from "@/components/chat/SocketProvider";
+import { EncryptionDebugger } from "@/components/chat/EncryptionDebugger"; // Add this import
 import { Button } from "@/components/ui/button";
 import { Plus, MessageSquare, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,10 +22,12 @@ export default function ChatPage() {
   const workspaceId = params.id as string;
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
+  const [showDebugger, setShowDebugger] = useState(false); // Add this state
 
   const { rooms, activeRoomId, isSidebarOpen, isConnected } = useSelector(
     (state: RootState) => state.chat
   );
+  console.log("Check connection:", isConnected);
 
   const {
     data: userRooms,
@@ -36,6 +39,7 @@ export default function ChatPage() {
   // Check if general room exists
   const hasGeneralRoom =
     userRooms?.some((room) => room.type === "general") || false;
+  const activeRoom = rooms.find((room) => room._id === activeRoomId);
 
   useEffect(() => {
     if (userRooms) {
@@ -67,6 +71,19 @@ export default function ChatPage() {
       return () => clearTimeout(timer);
     }
   }, [userRooms, isLoading, refetch]);
+
+  // Toggle debugger with keyboard shortcut (Ctrl+Shift+D)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+        e.preventDefault();
+        setShowDebugger((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   if (isLoading) {
     return (
@@ -154,8 +171,9 @@ export default function ChatPage() {
           <QuickInviteButton workspaceId={workspaceId} />
         </div>
 
-        {/* Connection Status */}
+        {/* Status Indicators */}
         <div className="fixed bottom-4 right-4 flex flex-col space-y-2">
+          {/* Connection Status */}
           {!isConnected && (
             <div className="rounded-lg bg-destructive px-4 py-2 text-sm text-destructive-foreground shadow-lg">
               <div className="flex items-center space-x-2">
@@ -173,14 +191,6 @@ export default function ChatPage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Encryption Status */}
-        <div className="fixed bottom-4 left-4 rounded-lg bg-green-600 px-3 py-1 text-xs text-white shadow-lg">
-          <div className="flex items-center space-x-1">
-            <Shield className="h-3 w-3" />
-            <span>E2E Encrypted</span>
-          </div>
         </div>
 
         {/* Create Room Dialog */}
