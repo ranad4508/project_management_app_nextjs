@@ -1,5 +1,3 @@
-// Create a separate MFA verification endpoint
-// app/api/auth/verify-mfa/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "@/src/services/auth.service";
 
