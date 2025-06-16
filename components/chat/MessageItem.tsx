@@ -14,6 +14,7 @@ import {
 import { MessageReactions } from "./MessageReactions";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageInfoDialog } from "./MessageInfoDialog";
+import { ForwardMessageDialog } from "./ForwardMessageDialog";
 import { useSocket } from "./SocketProvider";
 import {
   MoreHorizontal,
@@ -42,6 +43,7 @@ export function MessageItem({
 }: MessageItemProps) {
   const { addReaction } = useSocket();
   const [showMessageInfo, setShowMessageInfo] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
   const dispatch = useDispatch();
 
   const currentUser = useSelector((state: RootState) => state.auth.user);
@@ -60,8 +62,7 @@ export function MessageItem({
   };
 
   const handleForward = () => {
-    // TODO: Implement forward functionality
-    console.log("Forward message:", message._id);
+    setShowForwardDialog(true);
   };
 
   const formatMessageTime = (date: string | Date) => {
@@ -271,6 +272,13 @@ export function MessageItem({
       <MessageInfoDialog
         open={showMessageInfo}
         onOpenChange={setShowMessageInfo}
+        message={message}
+      />
+
+      {/* Forward Message Dialog */}
+      <ForwardMessageDialog
+        open={showForwardDialog}
+        onOpenChange={setShowForwardDialog}
         message={message}
       />
     </div>

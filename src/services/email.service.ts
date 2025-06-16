@@ -308,11 +308,22 @@ export class EmailService {
     recipientName: string,
     roomName: string,
     workspaceName: string,
-    roomId: string
+    roomId: string,
+    workspaceId?: string
   ): Promise<void> {
+    console.log("📧 Sending room invitation email:", {
+      email,
+      inviterName,
+      recipientName,
+      roomName,
+      workspaceName,
+      roomId,
+      workspaceId,
+    });
+
     const roomUrl = `${
       process.env.FRONTEND_URL || "http://localhost:3000"
-    }/dashboard/workspaces/${workspaceName}/chat?room=${roomId}`;
+    }/dashboard/workspaces/${workspaceId || workspaceName}/chat?room=${roomId}`;
 
     const html = `
       <!DOCTYPE html>

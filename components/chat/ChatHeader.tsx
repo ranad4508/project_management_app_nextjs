@@ -133,12 +133,10 @@ export function ChatHeader({ room }: ChatHeaderProps) {
                 View Members ({room.members.length})
               </DropdownMenuItem>
 
-              {room.type === "private" && (isAdmin || isOwner) && (
-                <DropdownMenuItem onClick={() => setShowInvite(true)}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Invite Members
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem onClick={() => setShowInvite(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Invite Members
+              </DropdownMenuItem>
 
               <DropdownMenuSeparator />
 
@@ -172,7 +170,11 @@ export function ChatHeader({ room }: ChatHeaderProps) {
         open={showInvite}
         onOpenChange={setShowInvite}
         room={room}
-        workspaceId={room.workspace}
+        workspaceId={
+          typeof room.workspace === "string"
+            ? room.workspace
+            : (room.workspace as any)?._id || room.workspace
+        }
       />
     </>
   );

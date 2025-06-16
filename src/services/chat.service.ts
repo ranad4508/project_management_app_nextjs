@@ -515,6 +515,12 @@ export class ChatService {
     inviterId: string,
     invitedUserId: string
   ): Promise<void> {
+    console.log("🎯 Processing room invitation with email:", {
+      roomId,
+      inviterId,
+      invitedUserId,
+    });
+
     // First, create the room invitation in the database
     await this.inviteToRoom(roomId, inviterId, invitedUserId);
 
@@ -551,7 +557,8 @@ export class ChatService {
         invitedUser.name,
         room.name,
         room.workspace.name,
-        roomId
+        roomId,
+        room.workspace._id || room.workspace
       );
 
       console.log(
