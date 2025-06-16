@@ -23,7 +23,9 @@ interface MessageInfoDialogProps {
 }
 
 const isPopulatedReplyTo = (replyTo: any): replyTo is ChatMessage => {
-  return replyTo && typeof replyTo === "object" && replyTo._id && replyTo.content;
+  return (
+    replyTo && typeof replyTo === "object" && replyTo._id && replyTo.content
+  );
 };
 
 export function MessageInfoDialog({
@@ -61,7 +63,9 @@ export function MessageInfoDialog({
               </h3>
               <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-lg">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={message.sender?.avatar || "/placeholder.svg"} />
+                  <AvatarImage
+                    src={message.sender?.avatar || "/placeholder.svg"}
+                  />
                   <AvatarFallback>
                     {message.sender?.name
                       ? message.sender.name.charAt(0).toUpperCase()
@@ -90,17 +94,23 @@ export function MessageInfoDialog({
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Sent:</span>
-                  <span className="font-medium">{formatDateTime(message.createdAt)}</span>
+                  <span className="font-medium">
+                    {formatDateTime(message.createdAt)}
+                  </span>
                 </div>
                 {message.editedAt && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Edited:</span>
-                    <span className="font-medium">{formatDateTime(message.editedAt)}</span>
+                    <span className="font-medium">
+                      {formatDateTime(message.editedAt)}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Time:</span>
-                  <span className="font-medium">{formatTime(message.createdAt)}</span>
+                  <span className="font-medium">
+                    {formatTime(message.createdAt)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -117,18 +127,14 @@ export function MessageInfoDialog({
                     {message.type.toUpperCase()}
                   </Badge>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ID:</span>
-                  <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">
-                    {message._id}
-                  </code>
-                </div>
                 {message.encryptedContent && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Encrypted:</span>
                     <div className="flex items-center gap-1">
                       <Shield className="h-3 w-3 text-green-600" />
-                      <span className="text-green-600 text-xs font-medium">Yes</span>
+                      <span className="text-green-600 text-xs font-medium">
+                        Yes
+                      </span>
                     </div>
                   </div>
                 )}
@@ -147,10 +153,16 @@ export function MessageInfoDialog({
                   <div className="p-3 bg-muted/50 rounded-lg border-l-4 border-primary/50">
                     <div className="flex items-center space-x-2 mb-2">
                       <Avatar className="h-6 w-6">
-                        <AvatarImage src={message.replyTo.sender?.avatar || "/placeholder.svg"} />
+                        <AvatarImage
+                          src={
+                            message.replyTo.sender?.avatar || "/placeholder.svg"
+                          }
+                        />
                         <AvatarFallback className="text-xs">
                           {message.replyTo.sender?.name
-                            ? message.replyTo.sender.name.charAt(0).toUpperCase()
+                            ? message.replyTo.sender.name
+                                .charAt(0)
+                                .toUpperCase()
                             : "?"}
                         </AvatarFallback>
                       </Avatar>

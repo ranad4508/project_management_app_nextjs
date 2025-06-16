@@ -4,6 +4,7 @@ export interface IRoomInvitation extends Document {
   room: mongoose.Types.ObjectId;
   invitedBy: mongoose.Types.ObjectId;
   invitedUser: mongoose.Types.ObjectId;
+  token: string;
   status: "pending" | "accepted" | "declined";
   expiresAt: Date;
   createdAt: Date;
@@ -26,6 +27,11 @@ const RoomInvitationSchema = new Schema<IRoomInvitation>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+    },
+    token: {
+      type: String,
+      required: true,
+      unique: true,
     },
     status: {
       type: String,

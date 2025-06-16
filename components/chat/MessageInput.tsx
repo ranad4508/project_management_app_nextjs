@@ -64,16 +64,49 @@ export function MessageInput({ roomId }: MessageInputProps) {
 
     if ((!message.trim() && attachedFiles.length === 0) || isLoading) return;
 
+    // Convert File objects to metadata format for Socket.IO
+    const processedAttachments = await Promise.all(
+      attachedFiles.map(async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const data = Array.from(new Uint8Array(arrayBuffer));
+
+        console.log("📎 Processing file with metadata:", {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        });
+
+        return {
+          data,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified,
+        };
+      })
+    );
+
     const messageData = {
       roomId,
       content: message.trim() || "📎 File attachment",
       type: attachedFiles.length > 0 ? MessageType.FILE : MessageType.TEXT,
-      attachments: attachedFiles,
+      attachments: processedAttachments,
       replyTo: replyToMessage?._id,
     };
 
     try {
-      console.log("📤 Sending message:", messageData);
+      console.log("📤 Message sent:", {
+        roomId: messageData.roomId,
+        content: messageData.content,
+        type: messageData.type,
+        attachments: messageData.attachments.map((att) => ({
+          name: att.name,
+          type: att.type,
+          size: att.size,
+          lastModified: att.lastModified,
+          data: `[Array of ${att.data.length} bytes]`,
+        })),
+      });
 
       // Try socket first if connected, fallback to API
       if (isConnected) {
@@ -148,28 +181,33 @@ export function MessageInput({ roomId }: MessageInputProps) {
 
       {/* File attachments preview */}
       {attachedFiles.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
+        <div className="mb-2 flex flex-wrap gap-1 sm:gap-2">
           {attachedFiles.map((file, index) => (
             <div
               key={index}
-              className="flex items-center space-x-2 rounded-lg bg-muted p-2"
+              className="flex items-center space-x-1 sm:space-x-2 rounded-lg bg-muted p-1 sm:p-2"
             >
-              <span className="text-sm truncate max-w-32">{file.name}</span>
+              <span className="text-xs sm:text-sm truncate max-w-20 sm:max-w-32">
+                {file.name}
+              </span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => removeAttachment(index)}
-                className="h-4 w-4 p-0"
+                className="h-3 w-3 sm:h-4 sm:w-4 p-0"
               >
-                <X className="h-3 w-3" />
+                <X className="h-2 w-2 sm:h-3 sm:w-3" />
               </Button>
             </div>
           ))}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-end space-x-2">
-        <div className="flex-1">
+      <form
+        onSubmit={handleSubmit}
+        className="flex items-end space-x-1 sm:space-x-2"
+      >
+        <div className="flex-1 min-w-0">
           <Textarea
             ref={textareaRef}
             value={message}
@@ -179,7 +217,7 @@ export function MessageInput({ roomId }: MessageInputProps) {
             }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
-            className="min-h-[40px] max-h-32 resize-none"
+            className="min-h-[36px] sm:min-h-[40px] max-h-24 sm:max-h-32 resize-none text-sm sm:text-base"
             rows={1}
           />
         </div>
@@ -189,13 +227,15 @@ export function MessageInput({ roomId }: MessageInputProps) {
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0"
+            className="h-7 w-7 sm:h-8 sm:w-8 p-0"
             onClick={() => setShowFileUpload(true)}
           >
-            <Paperclip className="h-4 w-4" />
+            <Paperclip className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
 
-          <EmojiPicker onEmojiSelect={handleEmojiSelect} />
+          <div className="hidden sm:block">
+            <EmojiPicker onEmojiSelect={handleEmojiSelect} />
+          </div>
 
           <Button
             type="submit"
@@ -204,12 +244,12 @@ export function MessageInput({ roomId }: MessageInputProps) {
               (!message.trim() && attachedFiles.length === 0) || isLoading
             }
             className={cn(
-              "h-8 w-8 p-0",
+              "h-7 w-7 sm:h-8 sm:w-8 p-0",
               (message.trim() || attachedFiles.length > 0) &&
                 "bg-primary text-primary-foreground"
             )}
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
         </div>
       </form>
@@ -219,14 +259,8 @@ export function MessageInput({ roomId }: MessageInputProps) {
         open={showFileUpload}
         onOpenChange={setShowFileUpload}
         onFilesSelect={handleFilesSelect}
-        maxFileSize={10 * 1024 * 1024} // 10MB
-        allowedTypes={[
-          "image/*",
-          "application/pdf",
-          "text/*",
-          "video/*",
-          "audio/*",
-        ]}
+        maxFileSize={100 * 1024 * 1024} // 100MB (WhatsApp-like)
+        allowedTypes={[]} // Accept ALL file types like WhatsApp
         multiple={true}
       />
     </div>

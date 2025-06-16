@@ -4,6 +4,7 @@ import { RoomInvitation } from "@/src/models/room-invitation";
 import { Workspace } from "@/src/models/workspace";
 import { EncryptionService } from "./encryption.service";
 import { FileUploadService } from "./file-upload.service";
+import crypto from "crypto";
 import {
   NotFoundError,
   AuthorizationError,
@@ -235,6 +236,56 @@ export class ChatService {
   }
 
   /**
+   * Delete all messages in a room (conversation)
+   */
+  async deleteRoomMessages(
+    roomId: string,
+    userId: string
+  ): Promise<{ deletedCount: number; roomId: string; roomName: string }> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if user is a member of the room
+    const member = room.members.find(
+      (m: any) => m.user && m.user.toString() === userId
+    );
+
+    if (!member) {
+      throw new AuthorizationError("You are not a member of this room");
+    }
+
+    // Check if user has permission to delete messages
+    // Only admins, owners, or room creator can delete all messages
+    const isOwner = room.createdBy && room.createdBy.toString() === userId;
+    const isAdmin = member.role === MemberRole.ADMIN;
+
+    if (!isOwner && !isAdmin) {
+      throw new AuthorizationError(
+        "You don't have permission to delete all messages in this room"
+      );
+    }
+
+    // Count messages before deletion
+    const messageCount = await ChatMessage.countDocuments({ room: roomId });
+
+    // Delete all messages in the room
+    const result = await ChatMessage.deleteMany({ room: roomId });
+
+    console.log(
+      `🗑️ User ${userId} deleted ${messageCount} messages from room ${room.name}`
+    );
+
+    return {
+      deletedCount: result.deletedCount,
+      roomId,
+      roomName: room.name,
+    };
+  }
+
+  /**
    * Send message with encryption
    */
   async sendMessage(
@@ -265,10 +316,59 @@ export class ChatService {
     if (attachments && attachments.length > 0) {
       processedAttachments = await Promise.all(
         attachments.map(async (file) => {
-          const uploadResult = await this.fileUploadService.uploadFile(
-            file,
-            userId
-          );
+          // Handle different file types (Buffer from Socket.IO or File from form)
+          let uploadResult;
+
+          if (file instanceof Buffer) {
+            // Legacy Buffer handling - should not happen with new format
+            uploadResult = await this.fileUploadService.uploadFile(
+              file,
+              userId,
+              `file_${Date.now()}.bin`, // Default name
+              "application/octet-stream" // Default type
+            );
+          } else if (
+            file &&
+            typeof file === "object" &&
+            (file as any).data &&
+            (file as any).name
+          ) {
+            // New format from Socket.IO with metadata preserved
+            const fileWithMeta = file as any;
+            console.log("📎 Processing file with metadata:", {
+              name: fileWithMeta.name,
+              type: fileWithMeta.type,
+              size: fileWithMeta.size,
+            });
+            const buffer = Buffer.from(fileWithMeta.data);
+            uploadResult = await this.fileUploadService.uploadFile(
+              buffer,
+              userId,
+              fileWithMeta.name, // Original filename
+              fileWithMeta.type // Original MIME type
+            );
+          } else if (
+            file &&
+            typeof file === "object" &&
+            typeof file.arrayBuffer === "function"
+          ) {
+            // File object with metadata (direct API upload)
+            uploadResult = await this.fileUploadService.uploadFile(
+              file,
+              userId,
+              file.name,
+              file.type
+            );
+          } else {
+            // Fallback for unknown format
+            console.warn("⚠️ Unknown file format:", file);
+            uploadResult = await this.fileUploadService.uploadFile(
+              file,
+              userId,
+              `file_${Date.now()}.bin`,
+              "application/octet-stream"
+            );
+          }
 
           // Encrypt file if room is encrypted
           let encryptedUrl = undefined;
@@ -280,9 +380,9 @@ export class ChatService {
 
           return {
             filename: uploadResult.filename,
-            originalName: file.name,
-            mimeType: file.type,
-            size: file.size,
+            originalName: uploadResult.originalName,
+            mimeType: uploadResult.mimeType,
+            size: uploadResult.size,
             url: uploadResult.url,
             encryptedUrl,
           };
@@ -496,11 +596,15 @@ export class ChatService {
       throw new ConflictError("User is already a member of this room");
     }
 
+    // Generate invitation token
+    const invitationToken = crypto.randomBytes(32).toString("hex");
+
     // Create invitation
     const invitation = new RoomInvitation({
       room: roomId,
       invitedBy: inviterId,
       invitedUser: invitedUserId,
+      token: invitationToken,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
     });
 
@@ -525,6 +629,23 @@ export class ChatService {
     await this.inviteToRoom(roomId, inviterId, invitedUserId);
 
     try {
+      // Get the invitation token that was just created
+      const invitation = await RoomInvitation.findOne({
+        room: roomId,
+        invitedUser: invitedUserId,
+        status: "pending",
+      }).sort({ createdAt: -1 });
+
+      if (!invitation) {
+        throw new NotFoundError("Invitation not found");
+      }
+
+      console.log("🔍 Found invitation:", {
+        id: invitation._id,
+        token: invitation.token,
+        hasToken: !!invitation.token,
+      });
+
       // Get room details
       const room = await ChatRoom.findById(roomId)
         .populate("workspace", "name")
@@ -549,7 +670,7 @@ export class ChatService {
         throw new NotFoundError("Invited user not found");
       }
 
-      // Send email invitation
+      // Send email invitation with token
       const emailService = new EmailService();
       await emailService.sendRoomInvitationEmail(
         invitedUser.email,
@@ -558,6 +679,7 @@ export class ChatService {
         room.name,
         room.workspace.name,
         roomId,
+        invitation.token,
         room.workspace._id || room.workspace
       );
 
@@ -571,7 +693,7 @@ export class ChatService {
   }
 
   /**
-   * Accept room invitation
+   * Accept room invitation by ID
    */
   async acceptRoomInvitation(
     invitationId: string,
@@ -619,6 +741,71 @@ export class ChatService {
     await invitation.save();
 
     console.log(`🔐 User ${userId} joined encrypted room ${room.name}`);
+  }
+
+  /**
+   * Accept room invitation by token
+   */
+  async acceptRoomInvitationByToken(
+    token: string,
+    userId: string
+  ): Promise<{ roomId: string; roomName: string }> {
+    const invitation = await RoomInvitation.findOne({
+      token,
+      status: "pending",
+    });
+
+    if (!invitation) {
+      throw new NotFoundError("Invitation not found");
+    }
+
+    if (invitation.invitedUser.toString() !== userId) {
+      throw new AuthorizationError("This invitation is not for you");
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      throw new ValidationError("Invitation has expired");
+    }
+
+    // Add user to room with encryption key
+    const room = await ChatRoom.findById(invitation.room);
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if user is already a member
+    const isMember = room.members.some(
+      (member: any) => member.user && member.user.toString() === userId
+    );
+
+    if (!isMember) {
+      // Generate public key for the new member if room is encrypted
+      const publicKey = room.isEncrypted
+        ? EncryptionService.generateDHKeyPair().publicKey
+        : undefined;
+
+      room.members.push({
+        user: userId as any,
+        role: MemberRole.MEMBER,
+        joinedAt: new Date(),
+        publicKey,
+      });
+
+      await room.save();
+    }
+
+    // Update invitation status
+    invitation.status = "accepted";
+    await invitation.save();
+
+    console.log(
+      `🔐 User ${userId} joined encrypted room ${room.name} via token`
+    );
+
+    return {
+      roomId: room._id.toString(),
+      roomName: room.name,
+    };
   }
 
   /**

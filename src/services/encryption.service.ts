@@ -160,6 +160,7 @@ export class EncryptionService {
     this.log(`📝 Original content length: ${content.length} chars`);
     this.log(`🔑 Using key ID: ${keyId}`);
     this.log(`🔐 Shared secret: ${sharedSecret.substring(0, 16)}...`);
+    this.log(`🔐 Method: Hash-based AES-256-GCM encryption`);
 
     const key = this.deriveAESKey(sharedSecret);
     const iv = crypto.randomBytes(this.IV_LENGTH);
@@ -215,6 +216,11 @@ export class EncryptionService {
 
     this.log(`🔖 Auth tag: ${authTagHex}`);
     this.log(`📊 Encrypted content only: ${encryptedContent}`);
+    this.log(`🔧 Setting up decipher with AES-256-GCM algorithm`);
+    this.log(`🔑 Using derived key for decryption`);
+    this.log(`🔢 Using IV: ${encryptedMessage.iv}`);
+    this.log(`🔖 Setting auth tag for verification`);
+    this.log(`🚀 Starting decryption process...`);
 
     try {
       const startTime = performance.now();
@@ -229,53 +235,27 @@ export class EncryptionService {
       this.log(`✅ Message decrypted in ${(endTime - startTime).toFixed(2)}ms`);
       this.log(`📝 Decrypted content: "${decrypted}"`);
       this.log(`📝 Decrypted content length: ${decrypted.length} chars`);
+      this.log(`🎉 Decryption process completed successfully!`);
+      this.log(`📋 Final decrypted output: "${decrypted}"`);
+      this.log(`🔓 Message decryption summary:`);
+      this.log(
+        `   📦 Input: ${encryptedMessage.encryptedContent.substring(0, 20)}...`
+      );
+      this.log(`   📝 Output: "${decrypted}"`);
+      this.log(`   ⏱️  Time: ${(endTime - startTime).toFixed(2)}ms`);
+      this.log(`   🔑 Key ID: ${encryptedMessage.keyId}`);
+      this.log(`   🔐 Method: Hash-based AES-256-GCM`);
 
       return decrypted;
     } catch (error) {
-      this.log(`❌ New method failed: ${(error as Error).message}`);
-
-      // Try legacy method for old messages
-      this.log("🔄 Trying legacy PBKDF2 method for old messages");
-      try {
-        // Legacy method used PBKDF2 with keyId as deterministic salt
-        const legacyKey = crypto.pbkdf2Sync(
-          Buffer.from(sharedSecret, "hex"),
-          Buffer.from(encryptedMessage.keyId),
-          100000,
-          this.KEY_LENGTH,
-          "sha256"
-        );
-
-        this.log(
-          `🔑 Legacy key hash: ${legacyKey.toString("hex").substring(0, 16)}...`
-        );
-
-        const legacyDecipher = crypto.createDecipheriv(
-          this.ALGORITHM,
-          legacyKey,
-          iv
-        );
-        legacyDecipher.setAAD(Buffer.from(encryptedMessage.keyId));
-        legacyDecipher.setAuthTag(authTag);
-
-        let legacyDecrypted = legacyDecipher.update(
-          encryptedContent,
-          "hex",
-          "utf8"
-        );
-        legacyDecrypted += legacyDecipher.final("utf8");
-
-        this.log(`✅ Legacy decryption successful!`);
-        this.log(`📝 Legacy decrypted content: "${legacyDecrypted}"`);
-
-        return legacyDecrypted;
-      } catch (legacyError) {
-        this.log(
-          `❌ Legacy method also failed: ${(legacyError as Error).message}`
-        );
-        this.log("⚠️ Returning fallback content for failed decryption");
-        return "[Encrypted message - unable to decrypt]";
-      }
+      this.log(`❌ Hash-based decryption failed: ${(error as Error).message}`);
+      this.log(
+        `🔍 Error details: Key ID: ${encryptedMessage.keyId}, IV: ${encryptedMessage.iv}`
+      );
+      this.log(
+        "⚠️ Message cannot be decrypted - may be corrupted or use incompatible encryption"
+      );
+      return "[Encrypted message - unable to decrypt]";
     }
   }
 

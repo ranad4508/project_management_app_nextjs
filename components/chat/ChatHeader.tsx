@@ -65,47 +65,51 @@ export function ChatHeader({ room }: ChatHeaderProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between border-b bg-card p-4">
-        <div className="flex items-center space-x-3">
+      <div className="flex items-center justify-between border-b bg-card p-2 sm:p-3 lg:p-4">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => dispatch(setSidebarOpen(!isSidebarOpen))}
-            className="h-8 w-8 p-0"
+            className="h-7 w-7 sm:h-8 sm:w-8 p-0 hidden lg:flex"
           >
-            <Menu className="h-4 w-4" />
+            <Menu className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 min-w-0 flex-1">
             {getRoomIcon()}
-            <div>
-              <h1 className="text-lg font-semibold">{room.name}</h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-sm sm:text-base lg:text-lg font-semibold truncate">
+                {room.name}
+              </h1>
               {room.description && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground truncate hidden sm:block">
                   {room.description}
                 </p>
               )}
             </div>
           </div>
 
-          {/* 🔒 Add Encryption Status Here */}
-          <EncryptionStatus room={room} isConnected={isConnected} />
+          {/* 🔒 Add Encryption Status Here - Hidden on mobile */}
+          <div className="hidden md:block">
+            <EncryptionStatus room={room} isConnected={isConnected} />
+          </div>
 
           {room.type === "private" && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs hidden sm:inline-flex">
               Private Room
             </Badge>
           )}
         </div>
 
-        <div className="flex items-center space-x-2">
-          {/* Online members */}
-          <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 sm:space-x-2">
+          {/* Online members - Responsive */}
+          <div className="hidden sm:flex items-center space-x-1">
             <div className="flex -space-x-2">
               {onlineUsers.slice(0, 3).map((user) => (
                 <Avatar
                   key={user.userId}
-                  className="h-6 w-6 border-2 border-background"
+                  className="h-5 w-5 sm:h-6 sm:w-6 border-2 border-background"
                 >
                   <AvatarImage src={user.avatar || "/placeholder.svg"} />
                   <AvatarFallback className="text-xs">
@@ -115,19 +119,30 @@ export function ChatHeader({ room }: ChatHeaderProps) {
               ))}
             </div>
 
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs sm:text-sm text-muted-foreground hidden md:inline">
               {onlineUsers.length} online
+            </span>
+          </div>
+
+          {/* Mobile online count */}
+          <div className="sm:hidden">
+            <span className="text-xs text-muted-foreground">
+              {onlineUsers.length}
             </span>
           </div>
 
           {/* Room actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MoreVertical className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
+              >
+                <MoreVertical className="h-3 w-3 sm:h-4 sm:w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem onClick={() => setShowMembers(true)}>
                 <Users className="mr-2 h-4 w-4" />
                 View Members ({room.members.length})
@@ -140,12 +155,10 @@ export function ChatHeader({ room }: ChatHeaderProps) {
 
               <DropdownMenuSeparator />
 
-              {(isAdmin || isOwner) && (
-                <DropdownMenuItem onClick={() => setShowSettings(true)}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Room Settings
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem onClick={() => setShowSettings(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                Room Settings
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

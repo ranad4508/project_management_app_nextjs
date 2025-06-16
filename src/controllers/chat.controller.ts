@@ -104,6 +104,25 @@ export class ChatController {
     }
   );
 
+  deleteRoomMessages = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      const result = await this.chatService.deleteRoomMessages(roomId, user.id);
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully deleted ${result.deletedCount} messages`,
+        data: result,
+      });
+    }
+  );
+
   // Message management
   getRoomMessages = asyncHandler(
     async (

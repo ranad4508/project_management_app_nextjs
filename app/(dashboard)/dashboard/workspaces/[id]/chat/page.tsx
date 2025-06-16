@@ -1,25 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { useGetUserRoomsQuery } from "@/src/store/api/chatApi";
-import { setRooms, setActiveRoom } from "@/src/store/slices/chatSlice";
+import {
+  setRooms,
+  setActiveRoom,
+  setSidebarOpen,
+} from "@/src/store/slices/chatSlice";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { CreateRoomDialog } from "@/components/chat/CreateRoomDialog";
 import { QuickInviteButton } from "@/components/chat/QuickInviteButton";
 import { SocketProvider } from "@/components/chat/SocketProvider";
-import { EncryptionDebugger } from "@/components/chat/EncryptionDebugger"; // Add this import
+
 import { Button } from "@/components/ui/button";
-import { Plus, MessageSquare, Shield } from "lucide-react";
+import { Plus, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RootState } from "@/src/store";
+import { toast } from "sonner";
 
 export default function ChatPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const dispatch = useDispatch();
   const workspaceId = params.id as string;
+  const roomParam = searchParams.get("room");
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false); // Add this state
@@ -46,8 +53,12 @@ export default function ChatPage() {
       console.log("📋 Loaded rooms:", userRooms);
       dispatch(setRooms(userRooms));
 
-      // Auto-select general room if no room is active
-      if (!activeRoomId && userRooms.length > 0) {
+      // Check if there's a room parameter (for invitation acceptance)
+      if (roomParam && userRooms.find((room) => room._id === roomParam)) {
+        console.log("🎯 Selecting room from URL parameter:", roomParam);
+        dispatch(setActiveRoom(roomParam));
+      } else if (!activeRoomId && userRooms.length > 0) {
+        // Auto-select general room if no room is active
         const generalRoom = userRooms.find((room) => room.type === "general");
         if (generalRoom) {
           console.log("🏠 Auto-selecting general room:", generalRoom._id);
@@ -59,7 +70,7 @@ export default function ChatPage() {
         }
       }
     }
-  }, [userRooms, dispatch, activeRoomId]);
+  }, [userRooms, dispatch, activeRoomId, roomParam]);
 
   // Auto-retry if no rooms found (general room might be creating)
   useEffect(() => {
@@ -115,34 +126,72 @@ export default function ChatPage() {
 
   return (
     <SocketProvider workspaceId={workspaceId}>
-      <div className="flex h-screen bg-background">
-        {/* Sidebar */}
+      <div className="flex h-screen bg-background overflow-hidden">
+        {/* Mobile Overlay */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => dispatch(setSidebarOpen(false))}
+          />
+        )}
+
+        {/* Sidebar - Responsive */}
         <div
           className={cn(
-            "flex flex-col border-r bg-card transition-all duration-300",
-            isSidebarOpen ? "w-80" : "w-0 overflow-hidden"
+            "flex flex-col border-r bg-card transition-all duration-300 z-50",
+            // Mobile: Fixed sidebar with overlay
+            "fixed inset-y-0 left-0 lg:relative lg:z-auto",
+            // Width and visibility
+            isSidebarOpen
+              ? "w-80 translate-x-0"
+              : "w-80 -translate-x-full lg:w-0 lg:translate-x-0 lg:overflow-hidden"
           )}
         >
-          <div className="flex items-center justify-between border-b p-4">
-            <div className="flex items-center space-x-2">
-              <h2 className="text-lg font-semibold">Chat Rooms</h2>
-              <Shield className="h-4 w-4 text-green-600" />
-              <span>End-to-End Encrypted</span>
+          <div className="flex items-center justify-between border-b p-3 lg:p-4">
+            <h2 className="text-base lg:text-lg font-semibold truncate">
+              Chat Rooms
+            </h2>
+            <div className="flex items-center space-x-1">
+              <Button
+                size="sm"
+                onClick={() => setIsCreateRoomOpen(true)}
+                className="h-7 w-7 lg:h-8 lg:w-8 p-0"
+              >
+                <Plus className="h-3 w-3 lg:h-4 lg:w-4" />
+              </Button>
+              {/* Mobile close button */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => dispatch(setSidebarOpen(false))}
+                className="h-7 w-7 p-0 lg:hidden"
+              >
+                ✕
+              </Button>
             </div>
-            <Button
-              size="sm"
-              onClick={() => setIsCreateRoomOpen(true)}
-              className="h-8 w-8 p-0"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
           </div>
 
           <ChatSidebar rooms={rooms} workspaceId={workspaceId} />
         </div>
 
-        {/* Main Chat Area */}
-        <div className="flex flex-1 flex-col relative">
+        {/* Main Chat Area - Responsive */}
+        <div className="flex flex-1 flex-col relative min-w-0 overflow-hidden">
+          {/* Mobile Header with Menu Button */}
+          <div className="lg:hidden flex items-center justify-between p-3 border-b bg-card">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => dispatch(setSidebarOpen(true))}
+              className="h-8 w-8 p-0"
+            >
+              ☰
+            </Button>
+            <h1 className="text-sm font-semibold truncate">
+              {activeRoomId ? "Chat" : "WorkSphere Chat"}
+            </h1>
+            <div className="w-8" /> {/* Spacer for centering */}
+          </div>
+
           {activeRoomId ? (
             <ChatWindow roomId={activeRoomId} />
           ) : (
@@ -169,28 +218,6 @@ export default function ChatPage() {
 
           {/* Quick Invite Button for Private Rooms */}
           <QuickInviteButton workspaceId={workspaceId} />
-        </div>
-
-        {/* Status Indicators */}
-        <div className="fixed bottom-4 right-4 flex flex-col space-y-2">
-          {/* Connection Status */}
-          {!isConnected && (
-            <div className="rounded-lg bg-destructive px-4 py-2 text-sm text-destructive-foreground shadow-lg">
-              <div className="flex items-center space-x-2">
-                <div className="h-2 w-2 rounded-full bg-destructive-foreground" />
-                <span>Disconnected from chat server</span>
-              </div>
-            </div>
-          )}
-
-          {isConnected && (
-            <div className="rounded-lg bg-green-600 px-4 py-2 text-sm text-white shadow-lg">
-              <div className="flex items-center space-x-2">
-                <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
-                <span>Connected to chat server</span>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Create Room Dialog */}

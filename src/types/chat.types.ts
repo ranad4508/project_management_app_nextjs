@@ -86,6 +86,7 @@ export interface ChatRoom {
   members: RoomMember[];
   isEncrypted: boolean;
   encryptionKeyId?: string;
+  isArchived: boolean;
   lastMessage?: ChatMessage;
   lastActivity: Date;
   settings: {
@@ -188,6 +189,7 @@ export interface CreateRoomData {
 export interface UpdateRoomData {
   name?: string;
   description?: string;
+  isArchived?: boolean;
   settings?: Partial<ChatRoom["settings"]>;
 }
 

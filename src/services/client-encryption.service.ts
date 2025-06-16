@@ -125,11 +125,13 @@ export class ClientEncryptionService {
    */
   static decryptMessage(roomId: string, encryptedMessage: any): string {
     this.log(`🔓 Decrypting message for room: ${roomId}`);
+    this.log(`📦 Encrypted input: ${encryptedMessage.encryptedContent}`);
     this.log(
       `📊 Encrypted content length: ${encryptedMessage.encryptedContent.length} chars`
     );
     this.log(`🔢 IV: ${encryptedMessage.iv}`);
     this.log(`🔑 Key ID: ${encryptedMessage.keyId}`);
+    this.log(`🔍 Looking up shared secret for room: ${roomId}`);
 
     const sharedSecret = this.sharedSecrets.get(`${roomId}-shared`);
     if (!sharedSecret) {
@@ -137,6 +139,9 @@ export class ClientEncryptionService {
       this.log(error);
       throw new Error(error);
     }
+
+    this.log(`🔐 Found shared secret: ${sharedSecret.substring(0, 16)}...`);
+    this.log(`🚀 Starting client-side decryption process...`);
 
     try {
       const startTime = performance.now();
@@ -147,7 +152,18 @@ export class ClientEncryptionService {
       const endTime = performance.now();
 
       this.log(`✅ Message decrypted in ${(endTime - startTime).toFixed(2)}ms`);
+      this.log(`📝 Decrypted content: "${decryptedContent}"`);
       this.log(`📝 Decrypted content length: ${decryptedContent.length} chars`);
+      this.log(`🎉 Client decryption process completed successfully!`);
+      this.log(`📋 Final client decrypted output: "${decryptedContent}"`);
+      this.log(`🔓 Client decryption summary:`);
+      this.log(`   🏠 Room: ${roomId}`);
+      this.log(
+        `   📦 Input: ${encryptedMessage.encryptedContent.substring(0, 20)}...`
+      );
+      this.log(`   📝 Output: "${decryptedContent}"`);
+      this.log(`   ⏱️  Time: ${(endTime - startTime).toFixed(2)}ms`);
+      this.log(`   🔑 Key ID: ${encryptedMessage.keyId}`);
 
       return decryptedContent;
     } catch (error) {

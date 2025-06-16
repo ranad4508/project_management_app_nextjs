@@ -72,7 +72,7 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
   return (
     <>
       <ScrollArea className="flex-1">
-        <div className="space-y-1 p-2">
+        <div className="space-y-1 p-1 sm:p-2">
           {rooms.map((room) => {
             const unreadCount = getUnreadCount(room);
             const onlineMembersCount = getOnlineMembersCount(room);
@@ -84,33 +84,33 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
                 <Button
                   variant={isActive ? "secondary" : "ghost"}
                   className={cn(
-                    "w-full justify-start h-auto p-3 text-left pr-8",
+                    "w-full justify-start h-auto p-2 sm:p-3 text-left pr-6 sm:pr-8",
                     isActive && "bg-accent"
                   )}
                   onClick={() => handleRoomSelect(room._id)}
                 >
-                  <div className="flex items-start space-x-3 w-full">
-                    <div className="flex-shrink-0 mt-1">
+                  <div className="flex items-start space-x-2 sm:space-x-3 w-full">
+                    <div className="flex-shrink-0 mt-0.5 sm:mt-1">
                       {getRoomIcon(room)}
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium truncate">
+                        <h4 className="text-xs sm:text-sm font-medium truncate">
                           {room.name}
                         </h4>
                         {unreadCount > 0 && (
                           <Badge
                             variant="destructive"
-                            className="ml-2 h-5 min-w-[20px] text-xs"
+                            className="ml-1 sm:ml-2 h-4 sm:h-5 min-w-[16px] sm:min-w-[20px] text-xs"
                           >
                             {unreadCount > 99 ? "99+" : unreadCount}
                           </Badge>
                         )}
                       </div>
 
-                      {/* 🔒 Add Encryption Status in Sidebar */}
-                      <div className="flex items-center space-x-2 mt-1">
+                      {/* 🔒 Add Encryption Status in Sidebar - Hidden on mobile */}
+                      <div className="hidden sm:flex items-center space-x-2 mt-1">
                         <EncryptionStatus
                           room={room}
                           isConnected={isConnected}
@@ -118,7 +118,7 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
                       </div>
 
                       {room.lastMessage && (
-                        <p className="text-xs text-muted-foreground truncate mt-1">
+                        <p className="text-xs text-muted-foreground truncate mt-1 hidden sm:block">
                           <span className="font-medium">
                             {room.lastMessage.sender.name}:
                           </span>{" "}
@@ -126,14 +126,14 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
                         </p>
                       )}
 
-                      <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center justify-between mt-1 sm:mt-2">
                         <div className="flex items-center space-x-1 text-xs text-muted-foreground">
                           <Users className="h-3 w-3" />
                           <span>{room.members.length}</span>
                           {onlineMembersCount > 0 && (
                             <>
-                              <span>•</span>
-                              <span className="text-green-600">
+                              <span className="hidden sm:inline">•</span>
+                              <span className="text-green-600 hidden sm:inline">
                                 {onlineMembersCount} online
                               </span>
                             </>
@@ -141,7 +141,7 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
                         </div>
 
                         {room.lastActivity && (
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground hidden sm:inline">
                             {formatDistanceToNow(new Date(room.lastActivity), {
                               addSuffix: true,
                             })}

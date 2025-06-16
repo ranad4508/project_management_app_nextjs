@@ -99,39 +99,39 @@ export function MessageItem({
   return (
     <div
       className={cn(
-        "group flex space-x-3 hover:bg-accent/50 rounded-lg p-2 -mx-2 transition-colors",
+        "group flex space-x-2 sm:space-x-3 hover:bg-accent/50 rounded-lg p-1 sm:p-2 -mx-1 sm:-mx-2 transition-colors",
         !showAvatar && "mt-1"
       )}
     >
       {/* Avatar */}
       <div className="flex-shrink-0">
         {showAvatar ? (
-          <Avatar className="h-8 w-8">
+          <Avatar className="h-6 w-6 sm:h-8 sm:w-8">
             <AvatarImage src={message.sender?.avatar || "/placeholder.svg"} />
-            <AvatarFallback>
+            <AvatarFallback className="text-xs sm:text-sm">
               {message.sender?.name
                 ? message.sender.name.charAt(0).toUpperCase()
                 : "?"}
             </AvatarFallback>
           </Avatar>
         ) : (
-          <div className="w-8" />
+          <div className="w-6 sm:w-8" />
         )}
       </div>
 
       {/* Message content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 max-w-full overflow-hidden">
         {showAvatar && (
-          <div className="flex items-baseline space-x-2 mb-1">
-            <span className="text-sm font-semibold text-foreground">
+          <div className="flex items-baseline space-x-1 sm:space-x-2 mb-1">
+            <span className="text-xs sm:text-sm font-semibold text-foreground truncate">
               {message.sender?.name || "Unknown User"}
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground flex-shrink-0">
               {formatMessageTime(message.createdAt)}
             </span>
 
             {message.editedAt && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs flex-shrink-0">
                 edited
               </Badge>
             )}
@@ -140,8 +140,8 @@ export function MessageItem({
 
         {/* Reply indicator */}
         {message.replyTo && isPopulatedReplyTo(message.replyTo) && (
-          <div className="mb-3 p-2 bg-muted/50 rounded-md border-l-4 border-primary/50">
-            <div className="flex items-start space-x-2">
+          <div className="mb-2 sm:mb-3 p-1 sm:p-2 bg-muted/50 rounded-md border-l-4 border-primary/50">
+            <div className="flex items-start space-x-1 sm:space-x-2">
               <Reply className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center space-x-1 mb-1">
@@ -161,7 +161,7 @@ export function MessageItem({
         )}
 
         {/* Message text */}
-        <div className="text-sm text-foreground whitespace-pre-wrap break-words">
+        <div className="text-xs sm:text-sm text-foreground whitespace-pre-wrap break-words max-w-full overflow-wrap-anywhere">
           {message.content}
         </div>
 
@@ -179,36 +179,36 @@ export function MessageItem({
         )}
       </div>
 
-      {/* Message actions */}
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {/* Message actions - Hidden on mobile, shown on hover on desktop */}
+      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hidden sm:block">
         <div className="flex items-center space-x-0.5 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-1">
           {/* Quick reactions */}
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+            className="h-6 w-6 sm:h-7 sm:w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
             onClick={() => handleReaction("like")}
             title="Like"
           >
-            <span className="text-sm">👍</span>
+            <span className="text-xs sm:text-sm">👍</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+            className="h-6 w-6 sm:h-7 sm:w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
             onClick={() => handleReaction("love")}
             title="Love"
           >
-            <span className="text-sm">❤️</span>
+            <span className="text-xs sm:text-sm">❤️</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+            className="h-6 w-6 sm:h-7 sm:w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
             onClick={() => handleReaction("laugh")}
             title="Laugh"
           >
-            <span className="text-sm">😂</span>
+            <span className="text-xs sm:text-sm">😂</span>
           </Button>
 
           {/* More actions */}

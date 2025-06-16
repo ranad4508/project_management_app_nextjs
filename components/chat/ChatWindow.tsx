@@ -68,21 +68,26 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col h-full max-h-screen overflow-hidden">
       <ChatHeader room={activeRoom} />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <MessageList
-          messages={messages}
-          isLoading={isLoading}
-          error={error}
-          onLoadMore={() => setPage((prev) => prev + 1)}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden min-h-0">
+        <div className="flex-1 overflow-hidden">
+          <MessageList
+            messages={messages}
+            isLoading={isLoading}
+            error={error}
+            onLoadMore={() => setPage((prev) => prev + 1)}
+          />
+        </div>
 
-        <TypingIndicator roomId={roomId} />
-
-        <ReplyBar />
-        <MessageInput roomId={roomId} />
+        <div className="flex-shrink-0 border-t bg-background">
+          <TypingIndicator roomId={roomId} />
+          <ReplyBar />
+          <div className="p-2 sm:p-3 lg:p-4">
+            <MessageInput roomId={roomId} />
+          </div>
+        </div>
       </div>
 
       <div ref={messagesEndRef} />

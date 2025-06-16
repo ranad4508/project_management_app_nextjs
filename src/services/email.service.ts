@@ -309,6 +309,7 @@ export class EmailService {
     roomName: string,
     workspaceName: string,
     roomId: string,
+    invitationToken: string,
     workspaceId?: string
   ): Promise<void> {
     console.log("📧 Sending room invitation email:", {
@@ -318,12 +319,13 @@ export class EmailService {
       roomName,
       workspaceName,
       roomId,
+      invitationToken,
       workspaceId,
     });
 
-    const roomUrl = `${
+    const roomInviteUrl = `${
       process.env.FRONTEND_URL || "http://localhost:3000"
-    }/dashboard/workspaces/${workspaceId || workspaceName}/chat?room=${roomId}`;
+    }/room-invite?token=${invitationToken}`;
 
     const html = `
       <!DOCTYPE html>
@@ -365,13 +367,14 @@ export class EmailService {
               <p>This room is end-to-end encrypted for maximum security. Your messages can only be read by members of this room.</p>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${roomUrl}" class="button">Join Private Room</a>
+                <a href="${roomInviteUrl}" class="button">Accept Invitation & Join Room</a>
               </div>
-              
+
               <p><strong>What happens next?</strong></p>
               <ul>
-                <li>Click the button above to join the private room</li>
+                <li>Click the button above to accept your invitation</li>
                 <li>Sign in to your account if you're not already logged in</li>
+                <li>Get automatically added to the private room</li>
                 <li>Start collaborating securely with your team</li>
               </ul>
             </div>

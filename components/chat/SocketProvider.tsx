@@ -317,10 +317,43 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
   const contextValue: SocketContextType = {
     socket: socketRef.current,
     isConnected,
-    sendMessage: (data) => {
+    sendMessage: async (data) => {
       socketLog("📤 Sending message via socket:", data);
       if (socketRef.current && isConnected) {
-        socketRef.current.emit("message:send", data);
+        // Process attachments to preserve file metadata
+        let processedData = { ...data };
+
+        if (data.attachments && data.attachments.length > 0) {
+          socketLog("📎 Processing file attachments...");
+
+          const processedAttachments = await Promise.all(
+            data.attachments.map(async (file: File) => {
+              // Convert File to Buffer with metadata
+              const arrayBuffer = await file.arrayBuffer();
+              const buffer = Array.from(new Uint8Array(arrayBuffer));
+
+              return {
+                data: buffer,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                lastModified: file.lastModified,
+              };
+            })
+          );
+
+          processedData.attachments = processedAttachments;
+          socketLog(
+            "📎 Processed attachments:",
+            processedAttachments.map((a) => ({
+              name: a.name,
+              type: a.type,
+              size: a.size,
+            }))
+          );
+        }
+
+        socketRef.current.emit("message:send", processedData);
       } else {
         socketLog("⚠️ Socket not connected, message not sent");
       }

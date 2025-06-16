@@ -17,6 +17,7 @@ export interface IChatRoom extends Document {
   }[];
   isEncrypted: boolean;
   encryptionKeyId?: string;
+  isArchived: boolean;
   lastMessage?: mongoose.Types.ObjectId;
   lastActivity: Date;
   settings: {
@@ -86,6 +87,10 @@ const ChatRoomSchema = new Schema<IChatRoom>(
     },
     encryptionKeyId: {
       type: String,
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
     },
     lastMessage: {
       type: Schema.Types.ObjectId,

@@ -40,8 +40,8 @@ export function MessageList({
   }
 
   return (
-    <ScrollArea ref={scrollAreaRef} className="flex-1 px-4">
-      <div className="space-y-4 py-4">
+    <ScrollArea ref={scrollAreaRef} className="h-full w-full px-4">
+      <div className="space-y-4 py-4 min-h-full">
         {/* Load more button */}
         {hasMore && messages.length > 0 && (
           <div className="text-center">
