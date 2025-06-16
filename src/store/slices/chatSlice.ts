@@ -260,6 +260,10 @@ const chatSlice = createSlice({
       state.replyToMessage = action.payload;
     },
 
+    clearReplyToMessage: (state) => {
+      state.replyToMessage = null;
+    },
+
     // Encryption
     setKeyPair: (
       state,
@@ -309,6 +313,7 @@ export const {
   setSidebarOpen,
   setSelectedMessage,
   setReplyToMessage,
+  clearReplyToMessage,
   setKeyPair,
   setSharedSecret,
   clearChatState,

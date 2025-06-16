@@ -561,8 +561,18 @@ export class WorkspaceService {
       throw new NotFoundError("Workspace not found");
     }
 
-    if (!workspace.isMember(userId)) {
-      throw new AuthorizationError("Access denied");
+    // Check if user is owner
+    if (workspace.owner && workspace.owner._id.toString() === userId) {
+      // User is workspace owner
+    } else {
+      // Check if user is member (with populated user data)
+      const isMember = workspace.members.some(
+        (member: any) => member.user && member.user._id.toString() === userId
+      );
+
+      if (!isMember) {
+        throw new AuthorizationError("Access denied");
+      }
     }
 
     // Get pending invitations

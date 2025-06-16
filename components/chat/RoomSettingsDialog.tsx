@@ -57,9 +57,9 @@ export function RoomSettingsDialog({
   });
 
   const isAdmin =
-    room.members.find((m) => m.user._id === currentUserId)?.role ===
+    room.members.find((m) => m.user && m.user._id === currentUserId)?.role ===
     MemberRole.ADMIN;
-  const isOwner = room.createdBy._id === currentUserId;
+  const isOwner = room.createdBy && room.createdBy._id === currentUserId;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

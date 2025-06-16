@@ -142,10 +142,23 @@ export class ChatController {
 
   sendMessage = asyncHandler(
     async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const body = await req.json();
+      // Try socket authentication first (x-user-id header), then session auth
+      let userId: string;
+      const socketUserId = req.headers.get("x-user-id");
 
-      const message = await this.chatService.sendMessage(user.id, body);
+      if (socketUserId) {
+        // Socket.IO authentication - just use the user ID directly
+        userId = socketUserId;
+        console.log("🔌 Socket.IO message from user:", userId);
+      } else {
+        // Regular session authentication
+        const user = await requireAuth(req);
+        userId = user.id;
+        console.log("🌐 HTTP message from user:", userId);
+      }
+
+      const body = await req.json();
+      const message = await this.chatService.sendMessage(userId, body);
 
       return NextResponse.json(
         {

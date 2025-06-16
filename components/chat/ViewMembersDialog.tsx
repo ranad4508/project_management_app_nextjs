@@ -49,11 +49,13 @@ export function ViewMembersDialog({
 }: ViewMembersDialogProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredMembers = room.members.filter(
-    (member) =>
-      member.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMembers = room.members
+    .filter((member) => member.user) // Filter out members with null user
+    .filter(
+      (member) =>
+        member.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        member.user.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   const getRoleIcon = (role: MemberRole) => {
     switch (role) {
@@ -85,11 +87,11 @@ export function ViewMembersDialog({
   };
 
   const isCurrentUserAdmin =
-    room.members.find((m) => m.user._id === currentUserId)?.role ===
+    room.members.find((m) => m.user && m.user._id === currentUserId)?.role ===
       MemberRole.ADMIN ||
-    room.members.find((m) => m.user._id === currentUserId)?.role ===
+    room.members.find((m) => m.user && m.user._id === currentUserId)?.role ===
       MemberRole.MODERATOR;
-  const isOwner = room.createdBy._id === currentUserId;
+  const isOwner = room.createdBy && room.createdBy._id === currentUserId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,27 +126,29 @@ export function ViewMembersDialog({
                   <div className="flex items-center space-x-3">
                     <Avatar className="h-10 w-10">
                       <AvatarImage
-                        src={member.user.avatar || "/placeholder.svg"}
+                        src={member.user?.avatar || "/placeholder.svg"}
                       />
                       <AvatarFallback>
-                        {member.user.name.charAt(0).toUpperCase()}
+                        {member.user?.name
+                          ? member.user.name.charAt(0).toUpperCase()
+                          : "?"}
                       </AvatarFallback>
                     </Avatar>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
                         <p className="text-sm font-medium truncate">
-                          {member.user.name}
+                          {member.user?.name || "Unknown User"}
                         </p>
                         {getRoleIcon(member.role)}
-                        {member.user._id === currentUserId && (
+                        {member.user?._id === currentUserId && (
                           <Badge variant="outline" className="text-xs">
                             You
                           </Badge>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {member.user.email}
+                        {member.user?.email || "No email"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Joined{" "}
@@ -160,7 +164,7 @@ export function ViewMembersDialog({
 
                     {/* Actions for admins */}
                     {(isCurrentUserAdmin || isOwner) &&
-                      member.user._id !== currentUserId && (
+                      member.user?._id !== currentUserId && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -175,6 +179,7 @@ export function ViewMembersDialog({
                             {member.role !== MemberRole.ADMIN && (
                               <DropdownMenuItem
                                 onClick={() =>
+                                  member.user?._id &&
                                   onUpdateRole?.(
                                     member.user._id,
                                     MemberRole.ADMIN
@@ -189,6 +194,7 @@ export function ViewMembersDialog({
                             {member.role !== MemberRole.MODERATOR && (
                               <DropdownMenuItem
                                 onClick={() =>
+                                  member.user?._id &&
                                   onUpdateRole?.(
                                     member.user._id,
                                     MemberRole.MODERATOR
@@ -203,6 +209,7 @@ export function ViewMembersDialog({
                             {member.role !== MemberRole.MEMBER && (
                               <DropdownMenuItem
                                 onClick={() =>
+                                  member.user?._id &&
                                   onUpdateRole?.(
                                     member.user._id,
                                     MemberRole.MEMBER
@@ -215,7 +222,10 @@ export function ViewMembersDialog({
                             )}
 
                             <DropdownMenuItem
-                              onClick={() => onRemoveMember?.(member.user._id)}
+                              onClick={() =>
+                                member.user?._id &&
+                                onRemoveMember?.(member.user._id)
+                              }
                               className="text-destructive"
                             >
                               <UserMinus className="mr-2 h-4 w-4" />

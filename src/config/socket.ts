@@ -1,11 +1,13 @@
 import type { Server as HttpServer } from "http";
 import { Server as SocketServer, type Socket } from "socket.io";
-import { getSession } from "next-auth/react";
-import { ChatRoom } from "@/src/models/chat-message";
+import { unstable_getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth"; // adjust path as needed
+import { ChatRoom } from "@/src/models/chat-room";
+
 import type {
-  SocketMessagePayload,
-  SocketTypingPayload,
-  SocketReactionPayload,
+  SendMessageData,
+  TypingIndicator,
+  MessageReaction,
 } from "@/src/types/chat.types";
 
 export class SocketService {
@@ -13,19 +15,23 @@ export class SocketService {
 
   initialize(server: HttpServer): void {
     this.io = new SocketServer(server, {
-      path: "/api/socketio",
+      path: "/api/socket/io",
       cors: {
         origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
         methods: ["GET", "POST"],
         credentials: true,
       },
       transports: ["websocket", "polling"],
-      allowEIO3: true,
     });
 
+    // Middleware for authentication
     this.io.use(async (socket: Socket, next) => {
       try {
-        const session = await getSession({ req: socket.request as any });
+        const session = await unstable_getServerSession(
+          socket.request as any,
+          {} as any,
+          authOptions
+        );
 
         if (!session || !session.user) {
           return next(new Error("Unauthorized"));
@@ -34,6 +40,7 @@ export class SocketService {
         socket.data.user = session.user;
         next();
       } catch (error) {
+        console.error("Socket auth error:", error);
         next(new Error("Authentication error"));
       }
     });
@@ -41,10 +48,8 @@ export class SocketService {
     this.io.on("connection", (socket: Socket) => {
       console.log(`User connected: ${socket.data.user.id}`);
 
-      // Join user to their rooms
       this.joinUserRooms(socket);
 
-      // Handle chat events
       this.handleChatEvents(socket);
 
       socket.on("disconnect", () => {
@@ -56,48 +61,39 @@ export class SocketService {
   private async joinUserRooms(socket: Socket): Promise<void> {
     try {
       const userId = socket.data.user.id;
-
-      // Find all chat rooms where user is a participant
       const rooms = await ChatRoom.find({ participants: userId });
 
-      // Join each room
       rooms.forEach((room) => {
-        socket.join(`room:${room._id.toString()}`);
+        const roomName = `room:${room._id.toString()}`;
+        socket.join(roomName);
+        // Emit 'room:joined' for each room joined with user info
+        socket.emit("room:joined", room._id.toString(), socket.data.user);
       });
 
-      // Also join user's personal channel for notifications
+      // Join personal user room for direct messages or notifications
       socket.join(`user:${userId}`);
-
-      socket.emit(
-        "rooms:joined",
-        rooms.map((room) => room._id.toString())
-      );
     } catch (error) {
       console.error("Error joining rooms:", error);
     }
   }
 
   private handleChatEvents(socket: Socket): void {
-    // New message event
-    socket.on("message:send", (payload: SocketMessagePayload) => {
-      // Broadcast to all users in the room except sender
-      socket.to(`room:${payload.roomId}`).emit("message:received", payload);
+    // Send message event uses SendMessageData type
+    socket.on("message:send", (payload: SendMessageData) => {
+      socket.to(`room:${payload.roomId}`).emit("message:new", payload);
     });
 
-    // Typing indicator
-    socket.on("typing:start", (payload: SocketTypingPayload) => {
-      socket.to(`room:${payload.roomId}`).emit("typing:update", payload);
+    // Typing started event
+    socket.on("typing:start", (payload: TypingIndicator) => {
+      socket.to(`room:${payload.roomId}`).emit("typing:start", payload);
     });
 
-    // Typing stopped
-    socket.on("typing:stop", (payload: SocketTypingPayload) => {
-      socket.to(`room:${payload.roomId}`).emit("typing:update", {
-        ...payload,
-        isTyping: false,
-      });
+    // Typing stopped event
+    socket.on("typing:stop", (payload: TypingIndicator) => {
+      socket.to(`room:${payload.roomId}`).emit("typing:stop", payload);
     });
 
-    // Message read
+    // Message read event
     socket.on(
       "message:read",
       (payload: { roomId: string; messageId: string; userId: string }) => {
@@ -105,23 +101,31 @@ export class SocketService {
       }
     );
 
-    // Message reaction
-    socket.on("message:reaction", (payload: SocketReactionPayload) => {
-      socket.to(`room:${payload.roomId}`).emit("message:reaction", payload);
+    // Reaction add
+    socket.on("reaction:add", (payload: MessageReaction) => {
+      socket.to(`room:${payload.roomId}`).emit("reaction:added", payload);
     });
 
-    // Join room (when added to a new room)
+    // Reaction remove
+    socket.on("reaction:remove", (payload: MessageReaction) => {
+      socket.to(`room:${payload.roomId}`).emit("reaction:removed", payload);
+    });
+
+    // Join room event — also emit room:joined with user data back to the user
     socket.on("room:join", (roomId: string) => {
-      socket.join(`room:${roomId}`);
+      const roomName = `room:${roomId}`;
+      socket.join(roomName);
+      socket.emit("room:joined", roomId, socket.data.user);
     });
 
-    // Leave room
+    // Leave room event — emit room:left to the user
     socket.on("room:leave", (roomId: string) => {
-      socket.leave(`room:${roomId}`);
+      const roomName = `room:${roomId}`;
+      socket.leave(roomName);
+      socket.emit("room:left", roomId, socket.data.user.id);
     });
   }
 
-  // Method to emit events from server
   emitToRoom(roomId: string, event: string, data: any): void {
     if (!this.io) return;
     this.io.to(`room:${roomId}`).emit(event, data);
@@ -138,5 +142,4 @@ export class SocketService {
   }
 }
 
-// Create singleton instance
 export const socketService = new SocketService();

@@ -50,16 +50,19 @@ export function InviteToRoomDialog({
   const workspaceMembers = workspaceMembersData?.members || [];
 
   // Filter members who are not already in the room and match search query
-  const availableMembers = workspaceMembers.filter((member) => {
-    const isNotInRoom = !room.members.some(
-      (roomMember) => roomMember.user._id === member.user._id
-    );
-    const matchesSearch =
-      member.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.user.email.toLowerCase().includes(searchQuery.toLowerCase());
+  const availableMembers = workspaceMembers
+    .filter((member) => member.user) // Filter out members with null user
+    .filter((member) => {
+      const isNotInRoom = !room.members.some(
+        (roomMember) =>
+          roomMember.user && roomMember.user._id === member.user._id
+      );
+      const matchesSearch =
+        member.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        member.user.email.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return isNotInRoom && matchesSearch;
-  });
+      return isNotInRoom && matchesSearch;
+    });
 
   const handleUserToggle = (userId: string) => {
     setSelectedUsers((prev) =>
@@ -171,24 +174,26 @@ export function InviteToRoomDialog({
 
                     <Avatar className="h-10 w-10">
                       <AvatarImage
-                        src={member.user.avatar || "/placeholder.svg"}
+                        src={member.user?.avatar || "/placeholder.svg"}
                       />
                       <AvatarFallback>
-                        {member.user.name.charAt(0).toUpperCase()}
+                        {member.user?.name
+                          ? member.user.name.charAt(0).toUpperCase()
+                          : "?"}
                       </AvatarFallback>
                     </Avatar>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2">
                         <p className="text-sm font-medium truncate">
-                          {member.user.name}
+                          {member.user?.name || "Unknown User"}
                         </p>
                         <Badge variant="outline" className="text-xs">
                           {member.role}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        {member.user.email}
+                        {member.user?.email || "No email"}
                       </p>
                     </div>
                   </div>

@@ -490,32 +490,39 @@ export default function WorkspacePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {workspace.members.slice(0, 5).map((member) => (
-                  <div
-                    key={member.user._id}
-                    className="flex items-center gap-3"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage
-                        src={member.user.avatar || "/placeholder.svg"}
-                      />
-                      <AvatarFallback>
-                        {member.user.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="font-medium">{member.user.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {member.user.email}
-                      </p>
+                {workspace.members
+                  .slice(0, 5)
+                  .filter((member) => member.user) // Filter out members with null user
+                  .map((member) => (
+                    <div
+                      key={member.user._id}
+                      className="flex items-center gap-3"
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage
+                          src={member.user?.avatar || "/placeholder.svg"}
+                        />
+                        <AvatarFallback>
+                          {member.user?.name
+                            ? member.user.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                            : "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium">
+                          {member.user?.name || "Unknown User"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {member.user?.email || "No email"}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{member.role}</Badge>
                     </div>
-                    <Badge variant="outline">{member.role}</Badge>
-                  </div>
-                ))}
+                  ))}
               </CardContent>
               <CardFooter>
                 <Button
@@ -764,17 +771,19 @@ export default function WorkspacePage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {(membersData?.members || workspace.members).map((member) => (
-                <MemberCard
-                  key={member.user._id}
-                  member={member}
-                  owner={workspace.owner}
-                  currentUserId={session?.user?.id}
-                  isAdmin={isAdmin()}
-                  onUpdateRole={handleUpdateRole}
-                  onRemoveMember={handleRemoveMember}
-                />
-              ))}
+              {(membersData?.members || workspace.members)
+                .filter((member) => member.user) // Filter out members with null user
+                .map((member) => (
+                  <MemberCard
+                    key={member.user._id}
+                    member={member}
+                    owner={workspace.owner}
+                    currentUserId={session?.user?.id}
+                    isAdmin={isAdmin()}
+                    onUpdateRole={handleUpdateRole}
+                    onRemoveMember={handleRemoveMember}
+                  />
+                ))}
 
               {/* Pending Invitations */}
               {membersData?.pendingInvitations &&

@@ -46,6 +46,7 @@ export interface MessageReaction {
   _id: string;
   user: User;
   type: ReactionType;
+  roomId?: string;
   createdAt: Date;
 }
 
@@ -159,6 +160,11 @@ export interface ClientToServerEvents {
   "room:leave": (roomId: string) => void;
   "key:exchange": (data: KeyExchange) => void;
   "key:request": (roomId: string) => void;
+  "message:read": (data: {
+    roomId: string;
+    messageId: string;
+    userId: string;
+  }) => void; // <-- add this
 }
 
 export interface SendMessageData {

@@ -1,20 +1,20 @@
-import mongoose, { Schema, type Document } from "mongoose"
-import { InvitationStatus } from "@/src/enums/invitation.enum"
-import { MemberRole } from "@/src/enums/user.enum"
+import mongoose, { Schema, type Document } from "mongoose";
+import { InvitationStatus } from "@/src/enums/invitation.enum";
+import { MemberRole } from "@/src/enums/user.enum";
 
 export interface IInvitation extends Document {
-  email: string
-  workspace: mongoose.Types.ObjectId
-  role: MemberRole
-  token: string
-  expiresAt: Date
-  invitedBy: mongoose.Types.ObjectId
-  status: InvitationStatus
-  message?: string
-  acceptedAt?: Date
-  declinedAt?: Date
-  createdAt: Date
-  updatedAt: Date
+  email: string;
+  workspace: mongoose.Types.ObjectId;
+  role: MemberRole;
+  token: string;
+  expiresAt: Date;
+  invitedBy: mongoose.Types.ObjectId;
+  status: InvitationStatus;
+  message?: string;
+  acceptedAt?: Date;
+  declinedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const InvitationSchema: Schema = new Schema(
@@ -65,18 +65,20 @@ const InvitationSchema: Schema = new Schema(
       type: Date,
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 // Indexes
-InvitationSchema.index({ email: 1, workspace: 1 })
-InvitationSchema.index({ token: 1 })
-InvitationSchema.index({ status: 1 })
-InvitationSchema.index({ expiresAt: 1 })
+InvitationSchema.index({ email: 1, workspace: 1 });
+// Note: token already has unique: true in field definition, so no need for separate index
+InvitationSchema.index({ status: 1 });
+InvitationSchema.index({ expiresAt: 1 });
 
 // Methods
 InvitationSchema.methods.isExpired = function (): boolean {
-  return new Date() > this.expiresAt
-}
+  return new Date() > this.expiresAt;
+};
 
-export const Invitation = mongoose.models.Invitation || mongoose.model<IInvitation>("Invitation", InvitationSchema)
+export const Invitation =
+  mongoose.models.Invitation ||
+  mongoose.model<IInvitation>("Invitation", InvitationSchema);

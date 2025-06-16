@@ -4,15 +4,25 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useSession } from "next-auth/react";
 import type {
-  SocketMessagePayload,
-  SocketReactionPayload,
+  ClientToServerEvents,
+  ServerToClientEvents,
+  SendMessageData,
+  TypingIndicator,
+  MessageReaction,
+  ReactionType,
 } from "@/src/types/chat.types";
+import type { User } from "@/src/types/workspace.types";
 
 export function useSocket() {
   const { data: session, status } = useSession();
+
   const [isConnected, setIsConnected] = useState(false);
   const [joinedRooms, setJoinedRooms] = useState<string[]>([]);
-  const socketRef = useRef<Socket | null>(null);
+
+  const socketRef = useRef<Socket<
+    ServerToClientEvents,
+    ClientToServerEvents
+  > | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const cleanup = useCallback(() => {
@@ -33,30 +43,27 @@ export function useSocket() {
     if (!session?.user || status !== "authenticated") return;
     if (socketRef.current?.connected) return; // Already connected
 
-    cleanup(); // Clean up any existing connection
+    cleanup();
 
-    // Initialize socket connection
+    // Match this path exactly to your server setup:
     const socket = io(
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
       {
-        path: "/api/socketio",
+        path: "/api/socket", // <-- Match your server's path here
         withCredentials: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
         autoConnect: true,
         transports: ["websocket", "polling"],
-        query: {
+        auth: {
           userId: session.user.id,
         },
       }
     );
 
-    // Set up event listeners
     socket.on("connect", () => {
       console.log("Socket connected");
       setIsConnected(true);
-
-      // Clear any pending reconnection attempts
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
@@ -68,9 +75,7 @@ export function useSocket() {
       setIsConnected(false);
       setJoinedRooms([]);
 
-      // Attempt to reconnect if disconnection wasn't intentional
       if (reason === "io server disconnect") {
-        // Server disconnected, attempt to reconnect after delay
         reconnectTimeoutRef.current = setTimeout(() => {
           if (session?.user && status === "authenticated") {
             socket.connect();
@@ -79,16 +84,29 @@ export function useSocket() {
       }
     });
 
-    socket.on("rooms:joined", (rooms: string[]) => {
-      console.log("Joined rooms:", rooms);
-      setJoinedRooms(rooms);
+    // Server emits "rooms:joined" (plural) per your backend code — listen accordingly
+    socket.on("rooms:joined", (roomIds: string[]) => {
+      console.log("Rooms joined:", roomIds);
+      setJoinedRooms(roomIds);
+    });
+
+    // If your backend emits these events (optional)
+    socket.on("room:joined", (roomId: string, user: User) => {
+      console.log("Room joined event:", roomId, user);
+      setJoinedRooms((prev) =>
+        prev.includes(roomId) ? prev : [...prev, roomId]
+      );
+    });
+
+    socket.on("room:left", (roomId: string, userId: string) => {
+      console.log("Room left:", roomId, userId);
+      setJoinedRooms((prev) => prev.filter((id) => id !== roomId));
     });
 
     socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err);
       setIsConnected(false);
 
-      // Retry connection after delay if user is still authenticated
       if (session?.user && status === "authenticated") {
         reconnectTimeoutRef.current = setTimeout(() => {
           socket.connect();
@@ -109,7 +127,7 @@ export function useSocket() {
   }, [session, status, cleanup]);
 
   useEffect(() => {
-    if (status === "loading") return; // Wait for session to load
+    if (status === "loading") return;
 
     if (status === "authenticated" && session?.user) {
       initializeSocket();
@@ -117,13 +135,12 @@ export function useSocket() {
       cleanup();
     }
 
-    // Cleanup on unmount or when dependencies change
     return cleanup;
   }, [session, status, initializeSocket, cleanup]);
 
-  // Send a message
+  // Send a message with SendMessageData type
   const sendMessage = useCallback(
-    (payload: SocketMessagePayload) => {
+    (payload: SendMessageData) => {
       if (socketRef.current?.connected && isConnected) {
         socketRef.current.emit("message:send", payload);
       } else {
@@ -133,40 +150,30 @@ export function useSocket() {
     [isConnected]
   );
 
-  // Start typing indicator
+  // Start typing — emit full TypingIndicator object (not just roomId)
   const startTyping = useCallback(
-    (roomId: string) => {
-      if (socketRef.current?.connected && isConnected && session?.user) {
-        socketRef.current.emit("typing:start", {
-          roomId,
-          userId: session.user.id,
-          userName: session.user.name || "User",
-          isTyping: true,
-        });
+    (payload: TypingIndicator) => {
+      if (socketRef.current?.connected && isConnected) {
+        socketRef.current.emit("typing:start", payload as any);
       }
     },
-    [isConnected, session]
+    [isConnected]
   );
 
-  // Stop typing indicator
+  // Stop typing — emit full TypingIndicator object
   const stopTyping = useCallback(
-    (roomId: string) => {
-      if (socketRef.current?.connected && isConnected && session?.user) {
-        socketRef.current.emit("typing:stop", {
-          roomId,
-          userId: session.user.id,
-          userName: session.user.name || "User",
-          isTyping: false,
-        });
+    (payload: TypingIndicator) => {
+      if (socketRef.current?.connected && isConnected) {
+        socketRef.current.emit("typing:stop", payload as any);
       }
     },
-    [isConnected, session]
+    [isConnected]
   );
 
   // Mark message as read
   const markMessageAsRead = useCallback(
     (roomId: string, messageId: string) => {
-      if (socketRef.current?.connected && isConnected && session?.user) {
+      if (socketRef.current?.connected && isConnected && session?.user?.id) {
         socketRef.current.emit("message:read", {
           roomId,
           messageId,
@@ -174,16 +181,26 @@ export function useSocket() {
         });
       }
     },
-    [isConnected, session]
+    [isConnected, session?.user?.id]
   );
 
-  // Send reaction
+  // Send reaction — emit full MessageReaction payload object
   const sendReaction = useCallback(
-    (payload: SocketReactionPayload) => {
+    (messageId: string, type: ReactionType) => {
       if (socketRef.current?.connected && isConnected) {
-        socketRef.current.emit("message:reaction", payload);
+        socketRef.current.emit("reaction:add", messageId, type);
       } else {
         console.warn("Cannot send reaction: Socket not connected");
+      }
+    },
+    [isConnected]
+  );
+
+  // Remove reaction — emit full MessageReaction payload object
+  const removeReaction = useCallback(
+    (messageId: string, reactionId: string) => {
+      if (socketRef.current?.connected && isConnected) {
+        socketRef.current.emit("reaction:remove", messageId, reactionId);
       }
     },
     [isConnected]
@@ -213,7 +230,7 @@ export function useSocket() {
     [isConnected]
   );
 
-  // Manual reconnect function
+  // Manual reconnect
   const reconnect = useCallback(() => {
     if (session?.user && status === "authenticated") {
       cleanup();
@@ -229,6 +246,7 @@ export function useSocket() {
     stopTyping,
     markMessageAsRead,
     sendReaction,
+    removeReaction,
     joinRoom,
     leaveRoom,
     reconnect,

@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { useGetRoomMessagesQuery } from "@/src/store/api/chatApi";
 import { ChatHeader } from "./ChatHeader";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { TypingIndicator } from "./TypingIndicator";
+import { ReplyBar } from "./ReplyBar";
 import { useSocket } from "./SocketProvider";
 import {
   selectActiveRoom,
   selectRoomMessages,
+  setMessages,
 } from "@/src/store/slices/chatSlice";
 import type { RootState } from "@/src/store";
 
@@ -22,6 +24,7 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
   const { joinRoom, leaveRoom } = useSocket();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
+  const dispatch = useDispatch();
 
   const activeRoom = useSelector(selectActiveRoom);
   const messages = useSelector(selectRoomMessages(roomId));
@@ -37,6 +40,14 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
     joinRoom(roomId);
     return () => leaveRoom(roomId);
   }, [roomId, joinRoom, leaveRoom]);
+
+  // Store fetched messages in Redux store
+  useEffect(() => {
+    if (messagesData?.data) {
+      console.log("📥 Loading messages from API:", messagesData.data.length);
+      dispatch(setMessages({ roomId, messages: messagesData.data }));
+    }
+  }, [messagesData, roomId, dispatch]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -70,6 +81,7 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
 
         <TypingIndicator roomId={roomId} />
 
+        <ReplyBar />
         <MessageInput roomId={roomId} />
       </div>
 

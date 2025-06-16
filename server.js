@@ -2,16 +2,24 @@ const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
 const { Server } = require("socket.io");
-const jwt = require("jsonwebtoken");
+
+// For Node.js versions that don't have fetch built-in
+if (!global.fetch) {
+  try {
+    global.fetch = require("node-fetch");
+  } catch (e) {
+    console.log("⚠️ node-fetch not available, using built-in fetch");
+  }
+}
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
@@ -23,10 +31,11 @@ app.prepare().then(() => {
     }
   });
 
-  // Initialize Socket.IO with proper CORS
+  // Initialize Socket.IO
   const io = new Server(server, {
+    path: "/api/socket/io",
     cors: {
-      origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      origin: process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`,
       methods: ["GET", "POST"],
       credentials: true,
     },
@@ -34,156 +43,177 @@ app.prepare().then(() => {
     allowEIO3: true,
   });
 
-  // Authentication middleware
-  io.use(async (socket, next) => {
-    try {
-      const token =
-        socket.handshake.auth.token ||
-        socket.handshake.headers.authorization?.split(" ")[1];
+  // Simple authentication - just check for userId
+  io.use((socket, next) => {
+    const { userId, workspaceId } = socket.handshake.auth;
 
-      if (!token) {
-        console.log("❌ No token provided for socket connection");
-        return next(new Error("Authentication token required"));
-      }
-
-      // Verify JWT token
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET || "your-secret-key"
-      );
-
-      // Store user info on socket
-      socket.userId = decoded.userId || decoded.id;
-      socket.userName = decoded.name || "Anonymous";
-      socket.userAvatar = decoded.avatar;
-
-      console.log(
-        `✅ Socket authenticated for user: ${socket.userName} (${socket.userId})`
-      );
-      next();
-    } catch (error) {
-      console.log("❌ Socket authentication failed:", error.message);
-      next(new Error("Invalid authentication token"));
+    if (!userId) {
+      console.log("❌ No userId provided for socket connection");
+      return next(new Error("User ID required"));
     }
+
+    console.log(`🔐 User connecting: ${userId} to workspace: ${workspaceId}`);
+    socket.userId = userId;
+    socket.workspaceId = workspaceId;
+    next();
   });
 
   // Socket.IO connection handling
   io.on("connection", (socket) => {
-    console.log(`🔌 User connected: ${socket.userName} (${socket.id})`);
+    const { userId, workspaceId } = socket;
+    console.log("🔌 User connected:", socket.id, "User ID:", userId);
 
-    // Join room
+    // Join user to their workspace room
+    if (workspaceId) {
+      socket.join(`workspace:${workspaceId}`);
+      console.log(
+        `👥 User ${userId} joined workspace room: workspace:${workspaceId}`
+      );
+    }
+
+    // Handle room joining
     socket.on("room:join", (roomId) => {
-      socket.join(roomId);
-      console.log(`🚪 User ${socket.userName} joined room ${roomId}`);
-
-      // Notify others in the room
-      socket.to(roomId).emit("user:joined", {
-        userId: socket.userId,
-        userName: socket.userName,
-        avatar: socket.userAvatar,
-      });
+      socket.join(`room:${roomId}`);
+      console.log(`🚪 User ${userId} joined room: ${roomId}`);
+      socket.to(`room:${roomId}`).emit("user:joined", { userId, roomId });
     });
 
-    // Leave room
+    // Handle room leaving
     socket.on("room:leave", (roomId) => {
-      socket.leave(roomId);
-      console.log(`🚪 User ${socket.userName} left room ${roomId}`);
-
-      // Notify others in the room
-      socket.to(roomId).emit("user:left", {
-        userId: socket.userId,
-        userName: socket.userName,
-      });
+      socket.leave(`room:${roomId}`);
+      console.log(`🚪 User ${userId} left room: ${roomId}`);
+      socket.to(`room:${roomId}`).emit("user:left", { userId, roomId });
     });
 
-    // Handle messages
-    socket.on("message:send", (data) => {
-      console.log(`📨 Message from ${socket.userName}:`, data);
+    // Handle message sending
+    socket.on("message:send", async (data) => {
+      console.log("📤 Message sent:", data);
 
-      // Create message object with proper structure
-      const message = {
-        _id: Date.now().toString(),
-        room: data.roomId,
-        sender: {
-          _id: socket.userId,
-          name: socket.userName,
-          avatar: socket.userAvatar,
-        },
-        type: data.type || "text",
-        content: data.content,
-        attachments: data.attachments || [],
-        reactions: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      try {
+        // Use the Next.js API route to save the message
+        // Create a simple HTTP request using Node.js built-in modules
+        const http = require("http");
+        const postData = JSON.stringify(data);
 
-      // Broadcast to room members (including sender)
-      io.to(data.roomId).emit("message:new", message);
+        const options = {
+          hostname: "localhost",
+          port: port,
+          path: "/api/chat/rooms/messages",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(postData),
+            "x-user-id": userId,
+          },
+        };
+
+        const req = http.request(options, (res) => {
+          let responseData = "";
+
+          res.on("data", (chunk) => {
+            responseData += chunk;
+          });
+
+          res.on("end", () => {
+            try {
+              if (res.statusCode === 201) {
+                const result = JSON.parse(responseData);
+                const savedMessage = result.data;
+
+                console.log("✅ Message saved to database:", savedMessage._id);
+
+                // Broadcast the saved message to all room members (including sender)
+                io.to(`room:${data.roomId}`).emit("message:new", savedMessage);
+              } else {
+                console.error(
+                  "❌ Failed to save message:",
+                  res.statusCode,
+                  responseData
+                );
+                socket.emit("error", { message: "Failed to save message" });
+              }
+            } catch (parseError) {
+              console.error("❌ Error parsing response:", parseError);
+              socket.emit("error", { message: "Failed to save message" });
+            }
+          });
+        });
+
+        req.on("error", (error) => {
+          console.error("❌ HTTP request error:", error);
+          socket.emit("error", { message: "Failed to save message" });
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        console.error("❌ Error saving message:", error);
+        socket.emit("error", {
+          message: "Failed to save message: " + error.message,
+        });
+      }
     });
 
     // Handle reactions
-    socket.on("reaction:add", (messageId, type) => {
-      console.log(
-        `👍 Reaction from ${socket.userName}: ${type} on ${messageId}`
-      );
-
-      const reaction = {
-        _id: Date.now().toString(),
-        user: {
-          _id: socket.userId,
-          name: socket.userName,
-          avatar: socket.userAvatar,
-        },
-        type,
-        createdAt: new Date(),
-      };
-
-      // Broadcast to all connected clients
-      socket.broadcast.emit("reaction:added", messageId, reaction);
+    socket.on("reaction:add", (data) => {
+      console.log("👍 Reaction added:", data);
+      socket.to(`room:${data.roomId}`).emit("reaction:added", data);
     });
 
-    socket.on("reaction:remove", (messageId, reactionId) => {
-      console.log(`👎 Reaction removed by ${socket.userName}: ${reactionId}`);
-      socket.broadcast.emit("reaction:removed", messageId, reactionId);
+    socket.on("reaction:remove", (data) => {
+      console.log("👎 Reaction removed:", data);
+      socket.to(`room:${data.roomId}`).emit("reaction:removed", data);
     });
 
     // Handle typing indicators
-    socket.on("typing:start", (roomId) => {
-      socket.to(roomId).emit("typing:start", {
-        userId: socket.userId,
-        userName: socket.userName,
-        roomId,
-        timestamp: new Date(),
+    socket.on("typing:start", (data) => {
+      socket.to(`room:${data.roomId}`).emit("typing:user_started", {
+        userId: data.userId,
+        roomId: data.roomId,
       });
     });
 
-    socket.on("typing:stop", (roomId) => {
-      socket.to(roomId).emit("typing:stop", {
-        userId: socket.userId,
-        userName: socket.userName,
-        roomId,
-        timestamp: new Date(),
+    socket.on("typing:stop", (data) => {
+      socket.to(`room:${data.roomId}`).emit("typing:user_stopped", {
+        userId: data.userId,
+        roomId: data.roomId,
+      });
+    });
+
+    // Handle disconnection
+    socket.on("disconnect", (reason) => {
+      console.log(`🔌 User ${userId} disconnected:`, reason);
+      // Notify all rooms that user left
+      socket.rooms.forEach((room) => {
+        if (room.startsWith("room:")) {
+          socket
+            .to(room)
+            .emit("user:left", { userId, roomId: room.replace("room:", "") });
+        }
       });
     });
 
     // Handle errors
     socket.on("error", (error) => {
-      console.error(`❌ Socket error from ${socket.userName}:`, error);
+      console.error("🔌 Socket error:", error);
     });
 
-    // Handle disconnect
-    socket.on("disconnect", (reason) => {
-      console.log(`❌ User disconnected: ${socket.userName} (${reason})`);
+    // Send connection confirmation
+    socket.emit("connected", {
+      message: "Connected to chat server",
+      userId,
+      workspaceId,
+      socketId: socket.id,
     });
   });
 
   server
     .once("error", (err) => {
-      console.error("❌ Server error:", err);
+      console.error(err);
       process.exit(1);
     })
     .listen(port, () => {
       console.log(`🚀 Server ready on http://${hostname}:${port}`);
-      console.log(`🔌 Socket.IO server running`);
+      console.log(`🔌 Socket.IO server ready on path: /api/socket/io`);
     });
 });

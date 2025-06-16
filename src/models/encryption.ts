@@ -19,7 +19,7 @@ const UserKeyPairSchema = new Schema<IUserKeyPair>(
       ref: "User",
       required: true,
       unique: true,
-      index: true,
+      // Removed index: true since unique: true already creates an index
     },
     publicKey: { type: String, required: true },
     privateKeyEncrypted: { type: String, required: true },
@@ -46,13 +46,13 @@ const ChatRoomKeySchema = new Schema<IChatRoomKey>(
       type: Schema.Types.ObjectId,
       ref: "ChatRoom",
       required: true,
-      index: true,
+      // Removed index: true since we have compound index below
     },
     user: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
+      // Removed index: true since we have compound index below
     },
     encryptedRoomKey: { type: String, required: true },
     sharedSecret: { type: String },

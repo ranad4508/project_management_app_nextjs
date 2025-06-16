@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MessageReactions } from "./MessageReactions";
 import { MessageAttachments } from "./MessageAttachments";
+import { MessageInfoDialog } from "./MessageInfoDialog";
 import { useSocket } from "./SocketProvider";
-import { MoreHorizontal, Reply, Edit, Trash2, Shield } from "lucide-react";
+import {
+  MoreHorizontal,
+  Reply,
+  Edit,
+  Trash2,
+  Info,
+  Forward,
+  Copy,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { setReplyToMessage } from "@/src/store/slices/chatSlice";
 import type { ChatMessage } from "@/src/types/chat.types";
 import type { RootState } from "@/src/store";
 
@@ -31,14 +41,27 @@ export function MessageItem({
   isEncrypted = false,
 }: MessageItemProps) {
   const { addReaction } = useSocket();
-  const [showReactions, setShowReactions] = useState(false);
+  const [showMessageInfo, setShowMessageInfo] = useState(false);
+  const dispatch = useDispatch();
 
   const currentUser = useSelector((state: RootState) => state.auth.user);
-  const isOwnMessage = currentUser?.id === message.sender._id;
+  const isOwnMessage = currentUser?.id === message.sender?._id;
 
   const handleReaction = (type: string) => {
     addReaction(message._id, type);
-    setShowReactions(false);
+  };
+
+  const handleCopyText = () => {
+    navigator.clipboard.writeText(message.content);
+  };
+
+  const handleReply = () => {
+    dispatch(setReplyToMessage(message));
+  };
+
+  const handleForward = () => {
+    // TODO: Implement forward functionality
+    console.log("Forward message:", message._id);
   };
 
   const formatMessageTime = (date: string | Date) => {
@@ -83,9 +106,11 @@ export function MessageItem({
       <div className="flex-shrink-0">
         {showAvatar ? (
           <Avatar className="h-8 w-8">
-            <AvatarImage src={message.sender.avatar || "/placeholder.svg"} />
+            <AvatarImage src={message.sender?.avatar || "/placeholder.svg"} />
             <AvatarFallback>
-              {message.sender.name.charAt(0).toUpperCase()}
+              {message.sender?.name
+                ? message.sender.name.charAt(0).toUpperCase()
+                : "?"}
             </AvatarFallback>
           </Avatar>
         ) : (
@@ -98,7 +123,7 @@ export function MessageItem({
         {showAvatar && (
           <div className="flex items-baseline space-x-2 mb-1">
             <span className="text-sm font-semibold text-foreground">
-              {message.sender.name}
+              {message.sender?.name || "Unknown User"}
             </span>
             <span className="text-xs text-muted-foreground">
               {formatMessageTime(message.createdAt)}
@@ -114,10 +139,22 @@ export function MessageItem({
 
         {/* Reply indicator */}
         {message.replyTo && isPopulatedReplyTo(message.replyTo) && (
-          <div className="mb-2 pl-3 border-l-2 border-muted">
-            <div className="text-xs text-muted-foreground">
-              <span className="font-medium">{message.replyTo.sender.name}</span>
-              <span className="ml-2">{message.replyTo.content}</span>
+          <div className="mb-3 p-2 bg-muted/50 rounded-md border-l-4 border-primary/50">
+            <div className="flex items-start space-x-2">
+              <Reply className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center space-x-1 mb-1">
+                  <span className="text-xs font-medium text-primary">
+                    {message.replyTo.sender?.name || "Unknown User"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    replied to
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                  {message.replyTo.content}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -127,70 +164,115 @@ export function MessageItem({
           {message.content}
         </div>
 
-        {/* Attachments */}
-        {message.attachments && message.attachments.length > 0 && (
-          <MessageAttachments attachments={message.attachments} />
-        )}
-
-        {/* Reactions */}
+        {/* Reactions - moved to be directly below text */}
         {message.reactions.length > 0 && (
           <MessageReactions
             reactions={message.reactions}
             messageId={message._id}
           />
         )}
+
+        {/* Attachments */}
+        {message.attachments && message.attachments.length > 0 && (
+          <MessageAttachments attachments={message.attachments} />
+        )}
       </div>
 
       {/* Message actions */}
-      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="flex items-center space-x-1">
+      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="flex items-center space-x-0.5 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-1">
           {/* Quick reactions */}
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
             onClick={() => handleReaction("like")}
+            title="Like"
           >
-            👍
+            <span className="text-sm">👍</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
             onClick={() => handleReaction("love")}
+            title="Love"
           >
-            ❤️
+            <span className="text-sm">❤️</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+            onClick={() => handleReaction("laugh")}
+            title="Laugh"
+          >
+            <span className="text-sm">😂</span>
           </Button>
 
           {/* More actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                <MoreHorizontal className="h-3 w-3" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                title="More options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={handleReply}>
                 <Reply className="mr-2 h-4 w-4" />
                 Reply
               </DropdownMenuItem>
 
+              <DropdownMenuItem onClick={handleCopyText}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Text
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={handleForward}>
+                <Forward className="mr-2 h-4 w-4" />
+                Forward
+              </DropdownMenuItem>
+
               {isOwnMessage && (
                 <>
-                  <DropdownMenuItem>
+                  <div className="border-t my-1" />
+                  <DropdownMenuItem
+                    onClick={() => console.log("Edit message:", message._id)}
+                  >
                     <Edit className="mr-2 h-4 w-4" />
-                    Edit
+                    Edit Message
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive">
+                  <DropdownMenuItem
+                    onClick={() => console.log("Delete message:", message._id)}
+                    className="text-destructive focus:text-destructive"
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
+                    Delete Message
                   </DropdownMenuItem>
                 </>
               )}
+
+              <div className="border-t my-1" />
+              <DropdownMenuItem onClick={() => setShowMessageInfo(true)}>
+                <Info className="mr-2 h-4 w-4" />
+                Message Info
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Message Info Dialog */}
+      <MessageInfoDialog
+        open={showMessageInfo}
+        onOpenChange={setShowMessageInfo}
+        message={message}
+      />
     </div>
   );
 }

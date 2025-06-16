@@ -124,7 +124,7 @@ const WorkspaceSchema: Schema = new Schema(
 );
 
 // Remove duplicate indexes - only keep necessary ones
-WorkspaceSchema.index({ slug: 1 });
+// Note: slug already has unique: true in field definition, so no need for separate index
 WorkspaceSchema.index({ owner: 1 });
 WorkspaceSchema.index({ "members.user": 1 });
 WorkspaceSchema.index({ status: 1 });
@@ -132,7 +132,8 @@ WorkspaceSchema.index({ status: 1 });
 // Methods
 WorkspaceSchema.methods.isMember = function (userId: string): boolean {
   return this.members.some(
-    (member: IWorkspaceMember) => member.user.toString() === userId
+    (member: IWorkspaceMember) =>
+      member.user && member.user.toString() === userId
   );
 };
 
@@ -140,14 +141,18 @@ WorkspaceSchema.methods.getMemberRole = function (
   userId: string
 ): MemberRole | null {
   const member = this.members.find(
-    (member: IWorkspaceMember) => member.user.toString() === userId
+    (member: IWorkspaceMember) =>
+      member.user && member.user.toString() === userId
   );
   return member ? member.role : null;
 };
 
 WorkspaceSchema.methods.isAdmin = function (userId: string): boolean {
   const role = this.getMemberRole(userId);
-  return role === MemberRole.ADMIN || this.owner.toString() === userId;
+  return (
+    role === MemberRole.ADMIN ||
+    (this.owner && this.owner.toString() === userId)
+  );
 };
 
 export const Workspace =

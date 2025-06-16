@@ -146,28 +146,6 @@ export function MessageInput({ roomId }: MessageInputProps) {
         </div>
       )}
 
-      {/* Reply indicator */}
-      {replyToMessage && (
-        <div className="mb-2 flex items-center justify-between rounded-lg bg-muted p-2">
-          <div className="text-sm">
-            <span className="font-medium">
-              Replying to {replyToMessage.sender.name}
-            </span>
-            <p className="text-muted-foreground truncate">
-              {replyToMessage.content}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dispatch(setReplyToMessage(null))}
-            className="h-6 w-6 p-0"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-
       {/* File attachments preview */}
       {attachedFiles.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">

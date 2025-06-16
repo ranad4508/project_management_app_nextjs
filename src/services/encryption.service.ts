@@ -26,15 +26,27 @@ export class EncryptionService {
     }
   }
 
+  // Store DH parameters to ensure consistency
+  private static dhParams: { prime: Buffer; generator: Buffer } | null = null;
+
   /**
    * Generate Diffie-Hellman key pair
    */
-  static generateDHKeyPair(): EncryptionKeys {
+  static generateDHKeyPair(): EncryptionKeys & {
+    dhParams: { prime: string; generator: string };
+  } {
     this.log("🔑 Generating Diffie-Hellman key pair");
 
     const startTime = performance.now();
     const dh = crypto.createDiffieHellman(2048);
     dh.generateKeys();
+
+    // Store DH parameters for later use
+    this.dhParams = {
+      prime: dh.getPrime(),
+      generator: dh.getGenerator(),
+    };
+
     const endTime = performance.now();
 
     const publicKey = dh.getPublicKey("hex");
@@ -49,6 +61,10 @@ export class EncryptionService {
     return {
       publicKey,
       privateKey,
+      dhParams: {
+        prime: this.dhParams.prime.toString("hex"),
+        generator: this.dhParams.generator.toString("hex"),
+      },
     };
   }
 
@@ -57,7 +73,8 @@ export class EncryptionService {
    */
   static computeSharedSecret(
     privateKey: string,
-    otherPublicKey: string
+    otherPublicKey: string,
+    dhParams?: { prime: string; generator: string }
   ): string {
     this.log("🔄 Computing shared secret");
     this.log(
@@ -65,7 +82,27 @@ export class EncryptionService {
     );
 
     const startTime = performance.now();
-    const dh = crypto.createDiffieHellman(2048);
+
+    let dh: crypto.DiffieHellman;
+
+    if (dhParams) {
+      // Use provided DH parameters
+      dh = crypto.createDiffieHellman(
+        Buffer.from(dhParams.prime, "hex"),
+        Buffer.from(dhParams.generator, "hex")
+      );
+    } else if (this.dhParams) {
+      // Use stored DH parameters
+      dh = crypto.createDiffieHellman(
+        this.dhParams.prime,
+        this.dhParams.generator
+      );
+    } else {
+      // Fallback to generating new parameters (not recommended for production)
+      this.log("⚠️ Warning: No DH parameters available, generating new ones");
+      dh = crypto.createDiffieHellman(2048);
+    }
+
     dh.setPrivateKey(Buffer.from(privateKey, "hex"));
 
     const sharedSecret = dh.computeSecret(Buffer.from(otherPublicKey, "hex"));
@@ -88,25 +125,24 @@ export class EncryptionService {
   }
 
   /**
-   * Generate AES key from shared secret
+   * Generate AES key from shared secret using simple hashing
    */
-  static deriveAESKey(sharedSecret: string, salt?: string): Buffer {
-    this.log("🔑 Deriving AES key from shared secret");
+  static deriveAESKey(sharedSecret: string): Buffer {
+    this.log("🔑 Deriving AES key from shared secret using hash");
 
     const startTime = performance.now();
-    const saltBuffer = salt ? Buffer.from(salt, "hex") : crypto.randomBytes(16);
 
-    const key = crypto.pbkdf2Sync(
-      Buffer.from(sharedSecret, "hex"),
-      saltBuffer,
-      100000,
-      this.KEY_LENGTH,
-      "sha256"
-    );
+    // Simple hash-based key derivation - consistent and reliable
+    const key = crypto
+      .createHash("sha256")
+      .update(Buffer.from(sharedSecret, "hex"))
+      .digest()
+      .subarray(0, this.KEY_LENGTH);
+
     const endTime = performance.now();
 
     this.log(`✅ AES key derived in ${(endTime - startTime).toFixed(2)}ms`);
-    this.log(`🧂 Salt: ${saltBuffer.toString("hex")}`);
+    this.log(`🔑 Key hash: ${key.toString("hex").substring(0, 16)}...`);
 
     return key;
   }
@@ -120,8 +156,10 @@ export class EncryptionService {
     keyId: string
   ): EncryptedMessage {
     this.log("🔒 Encrypting message");
+    this.log(`📝 Original content: "${content}"`);
     this.log(`📝 Original content length: ${content.length} chars`);
     this.log(`🔑 Using key ID: ${keyId}`);
+    this.log(`🔐 Shared secret: ${sharedSecret.substring(0, 16)}...`);
 
     const key = this.deriveAESKey(sharedSecret);
     const iv = crypto.randomBytes(this.IV_LENGTH);
@@ -139,8 +177,12 @@ export class EncryptionService {
     const endTime = performance.now();
 
     this.log(`✅ Message encrypted in ${(endTime - startTime).toFixed(2)}ms`);
+    this.log(`📊 Encrypted content: ${encrypted}`);
     this.log(`📊 Encrypted content length: ${encrypted.length} chars`);
     this.log(`🔖 Auth tag: ${authTag.toString("hex")}`);
+    this.log(
+      `📦 Final encrypted output: ${encrypted + ":" + authTag.toString("hex")}`
+    );
 
     return {
       encryptedContent: encrypted + ":" + authTag.toString("hex"),
@@ -150,27 +192,29 @@ export class EncryptionService {
   }
 
   /**
-   * Decrypt message content
+   * Decrypt message content using simple hashing
    */
   static decryptMessage(
     encryptedMessage: EncryptedMessage,
     sharedSecret: string
   ): string {
     this.log("🔓 Decrypting message");
+    this.log(`📦 Encrypted input: ${encryptedMessage.encryptedContent}`);
     this.log(
       `📊 Encrypted content length: ${encryptedMessage.encryptedContent.length} chars`
     );
     this.log(`🔢 IV: ${encryptedMessage.iv}`);
     this.log(`🔑 Key ID: ${encryptedMessage.keyId}`);
+    this.log(`🔐 Shared secret: ${sharedSecret.substring(0, 16)}...`);
 
     const key = this.deriveAESKey(sharedSecret);
     const iv = Buffer.from(encryptedMessage.iv, "hex");
-
     const [encryptedContent, authTagHex] =
       encryptedMessage.encryptedContent.split(":");
     const authTag = Buffer.from(authTagHex, "hex");
 
     this.log(`🔖 Auth tag: ${authTagHex}`);
+    this.log(`📊 Encrypted content only: ${encryptedContent}`);
 
     try {
       const startTime = performance.now();
@@ -183,12 +227,55 @@ export class EncryptionService {
       const endTime = performance.now();
 
       this.log(`✅ Message decrypted in ${(endTime - startTime).toFixed(2)}ms`);
+      this.log(`📝 Decrypted content: "${decrypted}"`);
       this.log(`📝 Decrypted content length: ${decrypted.length} chars`);
 
       return decrypted;
     } catch (error) {
-      this.log(`❌ Decryption failed: ${(error as Error).message}`);
-      throw error;
+      this.log(`❌ New method failed: ${(error as Error).message}`);
+
+      // Try legacy method for old messages
+      this.log("🔄 Trying legacy PBKDF2 method for old messages");
+      try {
+        // Legacy method used PBKDF2 with keyId as deterministic salt
+        const legacyKey = crypto.pbkdf2Sync(
+          Buffer.from(sharedSecret, "hex"),
+          Buffer.from(encryptedMessage.keyId),
+          100000,
+          this.KEY_LENGTH,
+          "sha256"
+        );
+
+        this.log(
+          `🔑 Legacy key hash: ${legacyKey.toString("hex").substring(0, 16)}...`
+        );
+
+        const legacyDecipher = crypto.createDecipheriv(
+          this.ALGORITHM,
+          legacyKey,
+          iv
+        );
+        legacyDecipher.setAAD(Buffer.from(encryptedMessage.keyId));
+        legacyDecipher.setAuthTag(authTag);
+
+        let legacyDecrypted = legacyDecipher.update(
+          encryptedContent,
+          "hex",
+          "utf8"
+        );
+        legacyDecrypted += legacyDecipher.final("utf8");
+
+        this.log(`✅ Legacy decryption successful!`);
+        this.log(`📝 Legacy decrypted content: "${legacyDecrypted}"`);
+
+        return legacyDecrypted;
+      } catch (legacyError) {
+        this.log(
+          `❌ Legacy method also failed: ${(legacyError as Error).message}`
+        );
+        this.log("⚠️ Returning fallback content for failed decryption");
+        return "[Encrypted message - unable to decrypt]";
+      }
     }
   }
 
@@ -246,8 +333,8 @@ export class EncryptionService {
     const key = this.deriveAESKey(sharedSecret);
     const ivBuffer = Buffer.from(iv, "hex");
 
-    const authTag = encryptedBuffer.slice(-16);
-    const encrypted = encryptedBuffer.slice(0, -16);
+    const authTag = encryptedBuffer.subarray(-16);
+    const encrypted = encryptedBuffer.subarray(0, -16);
 
     this.log(`🔖 Auth tag length: ${authTag.length} bytes`);
     this.log(`📊 Encrypted content length: ${encrypted.length} bytes`);

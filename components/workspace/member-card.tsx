@@ -44,6 +44,11 @@ export function MemberCard({
   onUpdateRole,
   onRemoveMember,
 }: MemberCardProps) {
+  // Add null checks for member.user
+  if (!member.user) {
+    return null; // Don't render if user is null
+  }
+
   const isOwner = member.user._id === owner._id;
   const isCurrentUser = member.user._id === currentUserId;
 
@@ -52,18 +57,22 @@ export function MemberCard({
       <CardContent className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10">
-            <AvatarImage src={member.user.avatar || "/placeholder.svg"} />
+            <AvatarImage src={member.user?.avatar || "/placeholder.svg"} />
             <AvatarFallback>
-              {member.user.name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")
-                .toUpperCase()}
+              {member.user?.name
+                ? member.user.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                : "?"}
             </AvatarFallback>
           </Avatar>
           <div>
-            <p className="font-medium">{member.user.name}</p>
-            <p className="text-sm text-muted-foreground">{member.user.email}</p>
+            <p className="font-medium">{member.user?.name || "Unknown User"}</p>
+            <p className="text-sm text-muted-foreground">
+              {member.user?.email || "No email"}
+            </p>
             <p className="text-xs text-muted-foreground">
               Joined {new Date(member.joinedAt).toLocaleDateString()}
             </p>
@@ -113,8 +122,9 @@ export function MemberCard({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will remove {member.user.name} from the workspace.
-                        They will lose access to all projects and tasks.
+                        This will remove {member.user?.name || "this user"} from
+                        the workspace. They will lose access to all projects and
+                        tasks.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

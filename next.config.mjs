@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["socket.io", "socket.io-client"],
-  },
+  serverExternalPackages: ["socket.io", "socket.io-client"],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

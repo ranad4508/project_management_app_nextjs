@@ -59,9 +59,9 @@ export function ChatHeader({ room }: ChatHeaderProps) {
   };
 
   const isAdmin =
-    room.members.find((m) => m.user._id === currentUser?.id)?.role ===
+    room.members.find((m) => m.user && m.user._id === currentUser?.id)?.role ===
     MemberRole.ADMIN;
-  const isOwner = room.createdBy._id === currentUser?.id;
+  const isOwner = room.createdBy && room.createdBy._id === currentUser?.id;
 
   return (
     <>
