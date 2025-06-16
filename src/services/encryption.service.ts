@@ -35,8 +35,6 @@ export class EncryptionService {
   static generateDHKeyPair(): EncryptionKeys & {
     dhParams: { prime: string; generator: string };
   } {
-    this.log("🔑 Generating Diffie-Hellman key pair");
-
     const startTime = performance.now();
     const dh = crypto.createDiffieHellman(2048);
     dh.generateKeys();
@@ -52,11 +50,15 @@ export class EncryptionService {
     const publicKey = dh.getPublicKey("hex");
     const privateKey = dh.getPrivateKey("hex");
 
-    this.log(
-      `✅ DH key pair generated in ${(endTime - startTime).toFixed(2)}ms`
+    // Log key generation for real-time chat
+    console.log("🔑 [CHAT-ENCRYPTION] Key Generation Started");
+    console.log(
+      `   ⏱️  Generation Time: ${(endTime - startTime).toFixed(2)}ms`
     );
-    this.log(`📤 Public key: ${publicKey.substring(0, 20)}...`);
-    this.log(`🔐 Private key: ${privateKey.substring(0, 10)}... (hidden)`);
+    console.log(`   📤 Public Key: ${publicKey.substring(0, 32)}...`);
+    console.log(`   🔐 Private Key: [HIDDEN] (${privateKey.length} chars)`);
+    console.log(`   🔧 Algorithm: Diffie-Hellman 2048-bit`);
+    console.log("✅ [CHAT-ENCRYPTION] Key Generation Completed");
 
     return {
       publicKey,
@@ -76,11 +78,6 @@ export class EncryptionService {
     otherPublicKey: string,
     dhParams?: { prime: string; generator: string }
   ): string {
-    this.log("🔄 Computing shared secret");
-    this.log(
-      `📥 Using other public key: ${otherPublicKey.substring(0, 20)}...`
-    );
-
     const startTime = performance.now();
 
     let dh: crypto.DiffieHellman;
@@ -99,7 +96,9 @@ export class EncryptionService {
       );
     } else {
       // Fallback to generating new parameters (not recommended for production)
-      this.log("⚠️ Warning: No DH parameters available, generating new ones");
+      console.log(
+        "⚠️ [CHAT-ENCRYPTION] Warning: No DH parameters available, generating new ones"
+      );
       dh = crypto.createDiffieHellman(2048);
     }
 
@@ -114,12 +113,15 @@ export class EncryptionService {
       .digest("hex")
       .substring(0, this.KEY_LENGTH * 2);
 
-    this.log(
-      `✅ Shared secret computed in ${(endTime - startTime).toFixed(2)}ms`
+    // Log key exchange for real-time chat
+    console.log("🔄 [CHAT-ENCRYPTION] Key Exchange Started");
+    console.log(
+      `   📥 Other Public Key: ${otherPublicKey.substring(0, 32)}...`
     );
-    this.log(
-      `🔐 Shared secret hash: ${hashedSecret.substring(0, 10)}... (hidden)`
-    );
+    console.log(`   ⏱️  Exchange Time: ${(endTime - startTime).toFixed(2)}ms`);
+    console.log(`   🔐 Shared Secret: [HIDDEN] (${hashedSecret.length} chars)`);
+    console.log(`   🔧 Method: Diffie-Hellman Key Exchange + SHA256`);
+    console.log("✅ [CHAT-ENCRYPTION] Key Exchange Completed");
 
     return hashedSecret;
   }
@@ -128,8 +130,6 @@ export class EncryptionService {
    * Generate AES key from shared secret using simple hashing
    */
   static deriveAESKey(sharedSecret: string): Buffer {
-    this.log("🔑 Deriving AES key from shared secret using hash");
-
     const startTime = performance.now();
 
     // Simple hash-based key derivation - consistent and reliable
@@ -141,9 +141,6 @@ export class EncryptionService {
 
     const endTime = performance.now();
 
-    this.log(`✅ AES key derived in ${(endTime - startTime).toFixed(2)}ms`);
-    this.log(`🔑 Key hash: ${key.toString("hex").substring(0, 16)}...`);
-
     return key;
   }
 
@@ -153,21 +150,26 @@ export class EncryptionService {
   static encryptMessage(
     content: string,
     sharedSecret: string,
-    keyId: string
+    keyId: string,
+    userId?: string,
+    roomId?: string,
+    messageId?: string
   ): EncryptedMessage {
-    this.log("🔒 Encrypting message");
-    this.log(`📝 Original content: "${content}"`);
-    this.log(`📝 Original content length: ${content.length} chars`);
-    this.log(`🔑 Using key ID: ${keyId}`);
-    this.log(`🔐 Shared secret: ${sharedSecret.substring(0, 16)}...`);
-    this.log(`🔐 Method: Hash-based AES-256-GCM encryption`);
+    const startTime = performance.now();
+
+    // Log encryption for real-time chat messages
+    console.log("🔒 [REAL-TIME-CHAT] Message Encryption Started");
+    console.log(`   👤 User ID: ${userId || "Not provided"}`);
+    console.log(`   🏠 Room ID: ${roomId || "Not provided"}`);
+    console.log(`   📨 Message ID: ${messageId || "Not provided"}`);
+    console.log(`   📝 Original Content: "${content}"`);
+    console.log(`   📏 Content Length: ${content.length} characters`);
+    console.log(`   🔑 Key ID: ${keyId}`);
+    console.log(`   🔧 Algorithm: AES-256-GCM`);
 
     const key = this.deriveAESKey(sharedSecret);
     const iv = crypto.randomBytes(this.IV_LENGTH);
 
-    this.log(`🔢 Generated IV: ${iv.toString("hex")}`);
-
-    const startTime = performance.now();
     const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv);
     cipher.setAAD(Buffer.from(keyId));
 
@@ -177,16 +179,20 @@ export class EncryptionService {
     const authTag = cipher.getAuthTag();
     const endTime = performance.now();
 
-    this.log(`✅ Message encrypted in ${(endTime - startTime).toFixed(2)}ms`);
-    this.log(`📊 Encrypted content: ${encrypted}`);
-    this.log(`📊 Encrypted content length: ${encrypted.length} chars`);
-    this.log(`🔖 Auth tag: ${authTag.toString("hex")}`);
-    this.log(
-      `📦 Final encrypted output: ${encrypted + ":" + authTag.toString("hex")}`
+    const finalEncrypted = encrypted + ":" + authTag.toString("hex");
+
+    // Log encryption results for real-time chat messages
+    console.log(`   🔢 Generated IV: ${iv.toString("hex")}`);
+    console.log(`   🔖 Auth Tag: ${authTag.toString("hex")}`);
+    console.log(`   � Encrypted Content: ${finalEncrypted}`);
+    console.log(`   � Encrypted Length: ${finalEncrypted.length} characters`);
+    console.log(
+      `   ⏱️  Encryption Time: ${(endTime - startTime).toFixed(2)}ms`
     );
+    console.log("✅ [REAL-TIME-CHAT] Message Encryption Completed");
 
     return {
-      encryptedContent: encrypted + ":" + authTag.toString("hex"),
+      encryptedContent: finalEncrypted,
       iv: iv.toString("hex"),
       keyId,
     };
@@ -197,16 +203,27 @@ export class EncryptionService {
    */
   static decryptMessage(
     encryptedMessage: EncryptedMessage,
-    sharedSecret: string
+    sharedSecret: string,
+    userId?: string,
+    roomId?: string,
+    messageId?: string
   ): string {
-    this.log("🔓 Decrypting message");
-    this.log(`📦 Encrypted input: ${encryptedMessage.encryptedContent}`);
-    this.log(
-      `📊 Encrypted content length: ${encryptedMessage.encryptedContent.length} chars`
+    const startTime = performance.now();
+
+    // Log decryption for real-time chat messages
+    console.log("🔓 [REAL-TIME-CHAT] Message Decryption Started");
+    console.log(`   👤 User ID: ${userId || "Not provided"}`);
+    console.log(`   🏠 Room ID: ${roomId || "Not provided"}`);
+    console.log(`   📨 Message ID: ${messageId || "Not provided"}`);
+    console.log(
+      `   📦 Encrypted Content: ${encryptedMessage.encryptedContent}`
     );
-    this.log(`🔢 IV: ${encryptedMessage.iv}`);
-    this.log(`🔑 Key ID: ${encryptedMessage.keyId}`);
-    this.log(`🔐 Shared secret: ${sharedSecret.substring(0, 16)}...`);
+    console.log(
+      `   📊 Encrypted Length: ${encryptedMessage.encryptedContent.length} characters`
+    );
+    console.log(`   🔢 IV: ${encryptedMessage.iv}`);
+    console.log(`   🔑 Key ID: ${encryptedMessage.keyId}`);
+    console.log(`   � Algorithm: AES-256-GCM`);
 
     const key = this.deriveAESKey(sharedSecret);
     const iv = Buffer.from(encryptedMessage.iv, "hex");
@@ -214,16 +231,7 @@ export class EncryptionService {
       encryptedMessage.encryptedContent.split(":");
     const authTag = Buffer.from(authTagHex, "hex");
 
-    this.log(`🔖 Auth tag: ${authTagHex}`);
-    this.log(`📊 Encrypted content only: ${encryptedContent}`);
-    this.log(`🔧 Setting up decipher with AES-256-GCM algorithm`);
-    this.log(`🔑 Using derived key for decryption`);
-    this.log(`🔢 Using IV: ${encryptedMessage.iv}`);
-    this.log(`🔖 Setting auth tag for verification`);
-    this.log(`🚀 Starting decryption process...`);
-
     try {
-      const startTime = performance.now();
       const decipher = crypto.createDecipheriv(this.ALGORITHM, key, iv);
       decipher.setAAD(Buffer.from(encryptedMessage.keyId));
       decipher.setAuthTag(authTag);
@@ -232,29 +240,25 @@ export class EncryptionService {
       decrypted += decipher.final("utf8");
       const endTime = performance.now();
 
-      this.log(`✅ Message decrypted in ${(endTime - startTime).toFixed(2)}ms`);
-      this.log(`📝 Decrypted content: "${decrypted}"`);
-      this.log(`📝 Decrypted content length: ${decrypted.length} chars`);
-      this.log(`🎉 Decryption process completed successfully!`);
-      this.log(`📋 Final decrypted output: "${decrypted}"`);
-      this.log(`🔓 Message decryption summary:`);
-      this.log(
-        `   📦 Input: ${encryptedMessage.encryptedContent.substring(0, 20)}...`
+      // Log decryption results for real-time chat messages
+      console.log(`   � Auth Tag: ${authTagHex}`);
+      console.log(`   📝 Decrypted Content: "${decrypted}"`);
+      console.log(`   📏 Decrypted Length: ${decrypted.length} characters`);
+      console.log(
+        `   ⏱️  Decryption Time: ${(endTime - startTime).toFixed(2)}ms`
       );
-      this.log(`   📝 Output: "${decrypted}"`);
-      this.log(`   ⏱️  Time: ${(endTime - startTime).toFixed(2)}ms`);
-      this.log(`   🔑 Key ID: ${encryptedMessage.keyId}`);
-      this.log(`   🔐 Method: Hash-based AES-256-GCM`);
+      console.log("✅ [REAL-TIME-CHAT] Message Decryption Completed");
 
       return decrypted;
     } catch (error) {
-      this.log(`❌ Hash-based decryption failed: ${(error as Error).message}`);
-      this.log(
-        `🔍 Error details: Key ID: ${encryptedMessage.keyId}, IV: ${encryptedMessage.iv}`
+      const endTime = performance.now();
+      console.log(
+        `❌ [REAL-TIME-CHAT] Decryption Failed: ${(error as Error).message}`
       );
-      this.log(
-        "⚠️ Message cannot be decrypted - may be corrupted or use incompatible encryption"
-      );
+      console.log(`   ⏱️  Failed After: ${(endTime - startTime).toFixed(2)}ms`);
+      console.log(`   🔍 Key ID: ${encryptedMessage.keyId}`);
+      console.log(`   🔍 IV: ${encryptedMessage.iv}`);
+      console.log("❌ [REAL-TIME-CHAT] Message Decryption Failed");
       return "[Encrypted message - unable to decrypt]";
     }
   }

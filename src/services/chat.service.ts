@@ -406,11 +406,13 @@ export class ChatService {
         // Generate a temporary shared secret for demonstration
         // In a real implementation, this would be derived from DH key exchange
         const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
-
         const encryptedContent = EncryptionService.encryptMessage(
           content,
           tempSharedSecret,
-          room.encryptionKeyId
+          room.encryptionKeyId,
+          userId,
+          roomId,
+          message._id.toString()
         );
         message.encryptedContent = encryptedContent;
 
@@ -488,14 +490,18 @@ export class ChatService {
         try {
           // Generate the same temporary shared secret
           const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
-
           const decryptedContent = EncryptionService.decryptMessage(
             messageObj.encryptedContent,
-            tempSharedSecret
+            tempSharedSecret,
+            userId,
+            roomId,
+            messageObj._id
           );
           messageObj.content = decryptedContent;
 
-          console.log(`🔓 Message decrypted for user ${userId}`);
+          console.log(
+            `🔓 Message decrypted - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
+          );
         } catch (error) {
           console.error("❌ Failed to decrypt message:", error);
           messageObj.content = "[Encrypted message - decryption failed]";
