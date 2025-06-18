@@ -1,5 +1,4 @@
 import * as crypto from "crypto";
-import type { MessageEncryptionData } from "@/src/types/chat.types";
 
 export class EncryptionUtils {
   private static readonly PBKDF2_ITERATIONS = 100000;

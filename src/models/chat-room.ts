@@ -107,11 +107,11 @@ const ChatRoomSchema = new Schema<IChatRoom>(
       },
       maxFileSize: {
         type: Number,
-        default: 10 * 1024 * 1024, // 10MB
+        default: 100 * 1024 * 1024, // 100MB - WhatsApp-like limit
       },
       allowedFileTypes: {
         type: [String],
-        default: ["image/*", "application/pdf", "text/*"],
+        default: ["*/*"], // Accept all file types by default
       },
       messageRetention: {
         type: Number,

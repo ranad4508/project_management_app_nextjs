@@ -407,13 +407,20 @@ export class ChatService {
           `🔐 [CHAT-SERVICE] Starting encryption for message in room: ${room.name} (${roomId})`
         );
 
-        // Generate a temporary shared secret for demonstration
-        // In a real implementation, this would be derived from DH key exchange
-        const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
+        // Use a consistent shared secret based on room and encryption key
+        // This ensures the same secret is used for encryption and decryption
+        const consistentSharedSecret = crypto
+          .createHash("sha256")
+          .update(`${room.encryptionKeyId}-${roomId}-consistent-key`)
+          .digest("hex");
+
+        console.log(
+          `🔑 [CHAT-SERVICE] Using consistent shared secret for room ${room.name}`
+        );
 
         const encryptedContent = EncryptionService.encryptMessage(
           content,
-          tempSharedSecret,
+          consistentSharedSecret,
           room.encryptionKeyId,
           userId,
           roomId,
@@ -498,20 +505,59 @@ export class ChatService {
         room.encryptionKeyId
       ) {
         try {
-          // Generate the same temporary shared secret
-          const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
-          const decryptedContent = EncryptionService.decryptMessage(
-            messageObj.encryptedContent,
-            tempSharedSecret,
-            userId,
-            roomId,
-            messageObj._id
-          );
-          messageObj.content = decryptedContent;
+          // Try new consistent shared secret first
+          const consistentSharedSecret = crypto
+            .createHash("sha256")
+            .update(`${room.encryptionKeyId}-${roomId}-consistent-key`)
+            .digest("hex");
 
           console.log(
-            `🔓 Message decrypted - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
+            `🔑 [CHAT-SERVICE] Using consistent shared secret for decryption in room ${room.name}`
           );
+
+          try {
+            const decryptedContent = EncryptionService.decryptMessage(
+              messageObj.encryptedContent,
+              consistentSharedSecret,
+              userId,
+              roomId,
+              messageObj._id
+            );
+            messageObj.content = decryptedContent;
+
+            console.log(
+              `🔓 Message decrypted - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
+            );
+          } catch (newKeyError) {
+            // If new key fails, try the old temporary shared secret for backward compatibility
+            console.log(
+              `🔄 [CHAT-SERVICE] New key failed, trying old temporary key for message ${messageObj._id}`
+            );
+
+            const oldTempSharedSecret =
+              "demo-shared-secret-" + room.encryptionKeyId;
+
+            try {
+              const decryptedContent = EncryptionService.decryptMessage(
+                messageObj.encryptedContent,
+                oldTempSharedSecret,
+                userId,
+                roomId,
+                messageObj._id
+              );
+              messageObj.content = decryptedContent;
+
+              console.log(
+                `🔓 Message decrypted with old key - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
+              );
+            } catch (oldKeyError) {
+              console.error(
+                "❌ Failed to decrypt message with both new and old keys:",
+                oldKeyError
+              );
+              messageObj.content = "[Encrypted message - decryption failed]";
+            }
+          }
         } catch (error) {
           console.error("❌ Failed to decrypt message:", error);
           messageObj.content = "[Encrypted message - decryption failed]";

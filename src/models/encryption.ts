@@ -8,6 +8,10 @@ interface IUserKeyPair extends Document {
   salt: string;
   iv: string;
   keyVersion: number;
+  dhParams: {
+    prime: string;
+    generator: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,13 +23,16 @@ const UserKeyPairSchema = new Schema<IUserKeyPair>(
       ref: "User",
       required: true,
       unique: true,
-      // Removed index: true since unique: true already creates an index
     },
     publicKey: { type: String, required: true },
     privateKeyEncrypted: { type: String, required: true },
     salt: { type: String, required: true },
     iv: { type: String, required: true },
     keyVersion: { type: Number, default: 1 },
+    dhParams: {
+      prime: { type: String, required: true },
+      generator: { type: String, required: true },
+    },
   },
   { timestamps: true }
 );
@@ -34,8 +41,12 @@ interface IChatRoomKey extends Document {
   roomId: Types.ObjectId;
   user: Types.ObjectId;
   encryptedRoomKey: string;
-  sharedSecret?: string;
+  sharedSecret: string;
   keyVersion: number;
+  dhParams: {
+    prime: string;
+    generator: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,17 +57,19 @@ const ChatRoomKeySchema = new Schema<IChatRoomKey>(
       type: Schema.Types.ObjectId,
       ref: "ChatRoom",
       required: true,
-      // Removed index: true since we have compound index below
     },
     user: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      // Removed index: true since we have compound index below
     },
     encryptedRoomKey: { type: String, required: true },
-    sharedSecret: { type: String },
+    sharedSecret: { type: String, required: true },
     keyVersion: { type: Number, default: 1 },
+    dhParams: {
+      prime: { type: String, required: true },
+      generator: { type: String, required: true },
+    },
   },
   { timestamps: true }
 );
