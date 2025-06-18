@@ -114,7 +114,6 @@ export function FileUploadDialog({
     preventDropOnDocument: true,
     // Force accept all files
     noDrag: false,
-    noDropzone: false,
   });
 
   // Get input props and force accept all files

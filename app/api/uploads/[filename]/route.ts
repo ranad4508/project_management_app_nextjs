@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { readFile } from "fs/promises";
@@ -29,7 +29,8 @@ export async function GET(
     }
 
     // Construct file path
-    const filePath = join(process.cwd(), "public/uploads", filename);
+    const uploadDir = process.env.UPLOAD_DIR || "./public/uploads";
+    const filePath = join(process.cwd(), uploadDir, filename);
 
     // Check if file exists
     if (!existsSync(filePath)) {
@@ -38,6 +39,11 @@ export async function GET(
 
     // Read file
     const fileBuffer = await readFile(filePath);
+
+    // Get original filename from query params if provided
+    const url = new URL(request.url);
+    const originalName = url.searchParams.get("name") || filename;
+    const download = url.searchParams.get("download") === "true";
 
     // Determine content type based on file extension
     const getContentType = (filename: string): string => {
@@ -103,14 +109,20 @@ export async function GET(
 
     const contentType = getContentType(filename);
 
-    // Create response with proper headers
+    // Create response with appropriate headers
     const response = new NextResponse(fileBuffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         "Content-Length": fileBuffer.length.toString(),
-        "Cache-Control": "private, max-age=3600", // Cache for 1 hour
-        "Content-Disposition": `inline; filename="${filename}"`, // Display inline by default
+        "Content-Disposition": download
+          ? `attachment; filename="${originalName}"`
+          : `inline; filename="${originalName}"`,
+        "Cache-Control": download
+          ? "private, no-cache"
+          : "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
       },
     });
 

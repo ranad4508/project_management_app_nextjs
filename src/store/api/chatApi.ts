@@ -6,7 +6,6 @@ import type {
   CreateRoomData,
   UpdateRoomData,
   SendMessageData,
-  RoomListResponse,
   MessageListResponse,
   ReactionType,
 } from "@/src/types/chat.types";
@@ -112,7 +111,7 @@ export const chatApi = createApi({
       },
     }),
 
-    // Message management
+    // Message management with pagination
     getRoomMessages: builder.query<
       MessageListResponse,
       { roomId: string; page?: number; limit?: number }
@@ -133,14 +132,65 @@ export const chatApi = createApi({
         }
         throw new Error(response.message || "Failed to fetch messages");
       },
+      // Merge pages for infinite scroll
+      serializeQueryArgs: ({ queryArgs }) => {
+        const { roomId } = queryArgs;
+        return roomId;
+      },
+      merge: (currentCache, newItems, { arg }) => {
+        if (arg.page === 1) {
+          // First page or refresh
+          return newItems;
+        }
+        // Append older messages to the beginning
+        return {
+          ...newItems,
+          messages: [...newItems.messages, ...currentCache.messages],
+        };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg?.page !== previousArg?.page;
+      },
     }),
 
     sendMessage: builder.mutation<ChatMessage, SendMessageData>({
-      query: (data) => ({
-        url: "rooms/messages",
-        method: "POST",
-        body: data,
-      }),
+      query: (data) => {
+        // Handle file uploads with FormData
+        if (data.attachments && data.attachments.length > 0) {
+          const formData = new FormData();
+          formData.append("roomId", data.roomId);
+          formData.append("content", data.content);
+          formData.append("type", data.type || "text");
+          if (data.replyTo) formData.append("replyTo", data.replyTo);
+          if (data.isEncrypted !== undefined)
+            formData.append("isEncrypted", data.isEncrypted.toString());
+
+          // Add files to FormData
+          data.attachments.forEach((file, index) => {
+            if (file instanceof File) {
+              formData.append(`attachments`, file);
+            }
+          });
+
+          return {
+            url: "rooms/messages",
+            method: "POST",
+            body: formData,
+            // Don't set Content-Type header, let browser set it with boundary
+            prepareHeaders: (headers: Headers) => {
+              headers.delete("Content-Type");
+              return headers;
+            },
+          };
+        }
+
+        // Regular JSON request for text messages
+        return {
+          url: "rooms/messages",
+          method: "POST",
+          body: data,
+        };
+      },
       invalidatesTags: (result, error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
       ],

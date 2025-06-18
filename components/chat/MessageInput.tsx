@@ -90,7 +90,7 @@ export function MessageInput({ roomId }: MessageInputProps) {
       roomId,
       content: message.trim() || "📎 File attachment",
       type: attachedFiles.length > 0 ? MessageType.FILE : MessageType.TEXT,
-      attachments: processedAttachments,
+      attachments: attachedFiles,
       replyTo: replyToMessage?._id,
     };
 
@@ -104,7 +104,6 @@ export function MessageInput({ roomId }: MessageInputProps) {
           type: att.type,
           size: att.size,
           lastModified: att.lastModified,
-          data: `[Array of ${att.data.length} bytes]`,
         })),
       });
 

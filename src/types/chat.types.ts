@@ -60,6 +60,32 @@ export interface MessageAttachment {
   encryptedUrl?: string;
 }
 
+export interface FileAttachment {
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  encryptedUrl?: string;
+}
+
+export interface ProcessedFileAttachment {
+  data: number[]; // Array buffer as number array
+  name: string;
+  type: string;
+  size: number;
+  lastModified?: number;
+}
+
+export interface SocketMessageData {
+  roomId: string;
+  content: string;
+  type?: MessageType;
+  attachments?: ProcessedFileAttachment[];
+  replyTo?: string;
+  isEncrypted?: boolean;
+}
+
 export interface ChatMessage {
   _id: string;
   room: string;

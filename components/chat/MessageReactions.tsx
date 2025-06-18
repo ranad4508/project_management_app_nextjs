@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useSocket } from "./SocketProvider";
 import { cn } from "@/lib/utils";
-import type { MessageReaction, ReactionType } from "@/src/types/chat.types";
+import type { MessageReaction } from "@/src/types/chat.types";
 import type { RootState } from "@/src/store";
 
 interface MessageReactionsProps {
@@ -18,14 +18,19 @@ interface MessageReactionsProps {
   messageId: string;
 }
 
-const reactionEmojis: Record<ReactionType, string> = {
+const reactionEmojis: Record<string, string> = {
   like: "👍",
   love: "❤️",
   laugh: "😂",
   angry: "😠",
   sad: "😢",
+  wow: "😮",
   thumbs_up: "👍",
   thumbs_down: "👎",
+  heart: "❤️",
+  fire: "🔥",
+  clap: "👏",
+  party: "🎉",
 };
 
 export function MessageReactions({
@@ -35,50 +40,81 @@ export function MessageReactions({
   const { addReaction, removeReaction } = useSocket();
   const currentUser = useSelector((state: RootState) => state.auth.user);
 
+  // Filter out null/undefined reactions and reactions with null users
+  const validReactions =
+    reactions?.filter((reaction) => {
+      return reaction && reaction.type && reaction.user && reaction.user._id;
+    }) || [];
+
   // Group reactions by type
-  const groupedReactions = reactions.reduce((acc, reaction) => {
+  const groupedReactions = validReactions.reduce((acc, reaction) => {
+    // Double-check that reaction and reaction.type exist
+    if (!reaction || !reaction.type) {
+      console.warn("Invalid reaction found:", reaction);
+      return acc;
+    }
+
     if (!acc[reaction.type]) {
       acc[reaction.type] = [];
     }
     acc[reaction.type].push(reaction);
     return acc;
-  }, {} as Record<ReactionType, MessageReaction[]>);
+  }, {} as Record<string, MessageReaction[]>);
 
-  const handleReactionClick = (type: ReactionType) => {
+  const handleReactionClick = (type: string) => {
+    if (!currentUser?.id) {
+      console.warn("No current user found");
+      return;
+    }
+
     const userReaction = groupedReactions[type]?.find(
-      (r) => r.user && r.user._id === currentUser?.id
+      (r) => r.user && r.user._id === currentUser.id
     );
 
-    if (userReaction) {
+    if (userReaction && userReaction._id) {
       removeReaction(messageId, userReaction._id);
     } else {
       addReaction(messageId, type);
     }
   };
 
+  // Don't render anything if no valid reactions
   if (Object.keys(groupedReactions).length === 0) {
     return null;
   }
 
   return (
-    <div className="flex flex-wrap gap-1 mt-2 mb-1">
+    <div className="flex flex-wrap gap-1 mt-2 mb-1 max-w-full">
       {Object.entries(groupedReactions).map(([type, reactionList]) => {
-        const hasUserReacted = reactionList.some(
+        // Filter out any reactions with null users in this specific group
+        const validReactionList = reactionList.filter(
+          (r) => r && r.user && r.user._id
+        );
+
+        if (validReactionList.length === 0) {
+          return null;
+        }
+
+        const hasUserReacted = validReactionList.some(
           (r) => r.user && r.user._id === currentUser?.id
         );
-        const userNames = reactionList
-          .filter((r) => r.user) // Filter out reactions with null user
+
+        // Get user names, filtering out null users
+        const userNames = validReactionList
+          .filter((r) => r.user && r.user.name) // Filter out reactions with null user or no name
           .map((r) => r.user.name || "Unknown User")
+          .slice(0, 5) // Show max 5 names
           .join(", ");
 
+        const remainingCount = Math.max(0, validReactionList.length - 5);
         const tooltipText =
-          reactionList.length === 1
-            ? `${userNames} reacted with ${
-                reactionEmojis[type as ReactionType]
+          validReactionList.length === 1
+            ? `${userNames} reacted with ${reactionEmojis[type] || type}`
+            : remainingCount > 0
+            ? `${userNames} and ${remainingCount} others reacted with ${
+                reactionEmojis[type] || type
               }`
-            : `${userNames} and ${
-                reactionList.length - 1
-              } others reacted with ${reactionEmojis[type as ReactionType]}`;
+            : `${userNames} reacted with ${reactionEmojis[type] || type}`;
 
         return (
           <TooltipProvider key={type}>
@@ -89,24 +125,25 @@ export function MessageReactions({
                   size="sm"
                   className={cn(
                     "h-6 px-2 text-xs rounded-full border transition-all duration-200 hover:scale-105 shadow-sm",
+                    "min-w-[2rem] max-w-[6rem] flex-shrink-0", // Responsive sizing
                     hasUserReacted
                       ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-400"
                       : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700"
                   )}
-                  onClick={() => handleReactionClick(type as ReactionType)}
+                  onClick={() => handleReactionClick(type)}
                 >
-                  <span className="text-sm mr-1">
-                    {reactionEmojis[type as ReactionType]}
+                  <span className="text-sm mr-1 flex-shrink-0">
+                    {reactionEmojis[type] || "👍"}
                   </span>
                   <span
                     className={cn(
-                      "font-medium text-xs",
+                      "font-medium text-xs truncate",
                       hasUserReacted
                         ? "text-blue-700 dark:text-blue-400"
                         : "text-gray-600 dark:text-gray-400"
                     )}
                   >
-                    {reactionList.length}
+                    {validReactionList.length}
                   </span>
                 </Button>
               </TooltipTrigger>

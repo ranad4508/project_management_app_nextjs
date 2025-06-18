@@ -1,0 +1,297 @@
+<svg viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="aliceGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5BA0F2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bobGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#E94B3C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F95C4C;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="publicGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#50C878;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#60D888;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="sharedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFB347;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFCB57;stop-opacity:1" />
+    </linearGradient>
+    <marker id="arrowhead" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 12 5, 0 10" fill="#333" stroke="#333" stroke-width="1" />
+    </marker>
+    <marker id="arrowheadRed" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <polygon points="0 0, 12 5, 0 10" fill="#DC143C" stroke="#DC143C" stroke-width="1" />
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="600" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#333">
+    Diffie-Hellman Key Exchange with AES Encryption/Decryption
+  </text>
+  
+  <!-- Alice Side -->
+  <rect x="50" y="60" width="200" height="680" fill="url(#aliceGrad)" stroke="#2E5A8A" stroke-width="2" rx="10"/>
+  <text x="150" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="white">
+    Alice
+  </text>
+  
+  <!-- Bob Side -->
+  <rect x="950" y="60" width="200" height="680" fill="url(#bobGrad)" stroke="#B23A2E" stroke-width="2" rx="10"/>
+  <text x="1050" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="white">
+    Bob
+  </text>
+  
+  <!-- Public Parameters -->
+  <rect x="400" y="60" width="400" height="80" fill="url(#publicGrad)" stroke="#3C8A5C" stroke-width="2" rx="10"/>
+  <text x="600" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">
+    Public Parameters (Known to All)
+  </text>
+  <text x="600" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">
+    Prime p = 23, Generator g = 5
+  </text>
+  <text x="600" y="125" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">
+    (In practice: very large prime numbers)
+  </text>
+  
+  <!-- Step 1: Generate Private Keys -->
+  <rect x="70" y="160" width="160" height="60" fill="white" stroke="#2E5A8A" stroke-width="2" rx="5"/>
+  <text x="150" y="180" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2E5A8A">
+    Step 1: Generate
+  </text>
+  <text x="150" y="195" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#2E5A8A">
+    Private Key a = 6
+  </text>
+  <text x="150" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    (Random secret)
+  </text>
+  
+  <rect x="970" y="160" width="160" height="60" fill="white" stroke="#B23A2E" stroke-width="2" rx="5"/>
+  <text x="1050" y="180" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#B23A2E">
+    Step 1: Generate
+  </text>
+  <text x="1050" y="195" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#B23A2E">
+    Private Key b = 15
+  </text>
+  <text x="1050" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    (Random secret)
+  </text>
+  
+  <!-- Step 2: Calculate Public Keys -->
+  <rect x="70" y="240" width="160" height="80" fill="white" stroke="#2E5A8A" stroke-width="2" rx="5"/>
+  <text x="150" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2E5A8A">
+    Step 2: Calculate
+  </text>
+  <text x="150" y="275" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#2E5A8A">
+    Public Key A
+  </text>
+  <text x="150" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#2E5A8A">
+    A = g^a mod p
+  </text>
+  <text x="150" y="305" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#2E5A8A">
+    A = 5^6 mod 23 = 8
+  </text>
+  
+  <rect x="970" y="240" width="160" height="80" fill="white" stroke="#B23A2E" stroke-width="2" rx="5"/>
+  <text x="1050" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#B23A2E">
+    Step 2: Calculate
+  </text>
+  <text x="1050" y="275" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#B23A2E">
+    Public Key B
+  </text>
+  <text x="1050" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#B23A2E">
+    B = g^b mod p
+  </text>
+  <text x="1050" y="305" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#B23A2E">
+    B = 5^15 mod 23 = 19
+  </text>
+  
+  <!-- Step 3: Exchange Public Keys -->
+  <rect x="300" y="340" width="600" height="50" fill="#f0f0f0" stroke="#666" stroke-width="2" rx="8"/>
+  <text x="600" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#333">
+    Step 3: Public Key Exchange
+  </text>
+  <text x="600" y="378" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#666">
+    (Over Insecure Channel - Can be intercepted but useless without private keys)
+  </text>
+  
+  <!-- Alice sends A to Bob -->
+  <line x1="250" y1="270" x2="920" y2="270" stroke="#333" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <text x="585" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Alice sends A = 8 to Bob
+  </text>
+  
+  <!-- Bob sends B to Alice -->
+  <line x1="920" y1="310" x2="250" y2="310" stroke="#333" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <text x="585" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">
+    Bob sends B = 19 to Alice
+  </text>
+  
+  <!-- Step 4: Calculate Shared Secret -->
+  <rect x="70" y="420" width="160" height="90" fill="url(#sharedGrad)" stroke="#CC8A2E" stroke-width="2" rx="5"/>
+  <text x="150" y="440" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#8B4513">
+    Step 4: Calculate
+  </text>
+  <text x="150" y="455" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#8B4513">
+    Shared Secret
+  </text>
+  <text x="150" y="470" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#8B4513">
+    S = B^a mod p
+  </text>
+  <text x="150" y="485" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#8B4513">
+    S = 19^6 mod 23 = 2
+  </text>
+  <text x="150" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    (Uses received B and own a)
+  </text>
+  
+  <rect x="970" y="420" width="160" height="90" fill="url(#sharedGrad)" stroke="#CC8A2E" stroke-width="2" rx="5"/>
+  <text x="1050" y="440" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#8B4513">
+    Step 4: Calculate
+  </text>
+  <text x="1050" y="455" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#8B4513">
+    Shared Secret
+  </text>
+  <text x="1050" y="470" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#8B4513">
+    S = A^b mod p
+  </text>
+  <text x="1050" y="485" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#8B4513">
+    S = 8^15 mod 23 = 2
+  </text>
+  <text x="1050" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    (Uses received A and own b)
+  </text>
+  
+  <!-- Shared Secret Confirmation with arrows -->
+  <rect x="350" y="460" width="500" height="50" fill="url(#sharedGrad)" stroke="#CC8A2E" stroke-width="2" rx="8"/>
+  <text x="600" y="480" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#8B4513">
+    ✓ Both parties now have Shared Secret S = 2
+  </text>
+  <text x="600" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#8B4513">
+    (Computed independently but identical result!)
+  </text>
+  
+  <!-- Arrows pointing to shared secret -->
+  <line x1="230" y1="465" x2="340" y2="480" stroke="#CC8A2E" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <line x1="970" y1="465" x2="860" y2="480" stroke="#CC8A2E" stroke-width="3" marker-end="url(#arrowhead)"/>
+  
+  <!-- Step 5: Derive AES Key -->
+  <rect x="70" y="540" width="160" height="70" fill="#E6E6FA" stroke="#6A5ACD" stroke-width="2" rx="5"/>
+  <text x="150" y="560" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#6A5ACD">
+    Step 5: Derive
+  </text>
+  <text x="150" y="575" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6A5ACD">
+    AES Key from S
+  </text>
+  <text x="150" y="590" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6A5ACD">
+    Key = SHA256(S)
+  </text>
+  <text x="150" y="603" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    (Hash/KDF applied)
+  </text>
+  
+  <rect x="970" y="540" width="160" height="70" fill="#E6E6FA" stroke="#6A5ACD" stroke-width="2" rx="5"/>
+  <text x="1050" y="560" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#6A5ACD">
+    Step 5: Derive
+  </text>
+  <text x="1050" y="575" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6A5ACD">
+    AES Key from S
+  </text>
+  <text x="1050" y="590" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#6A5ACD">
+    Key = SHA256(S)
+  </text>
+  <text x="1050" y="603" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#666">
+    (Hash/KDF applied)
+  </text>
+  
+  <!-- AES Key Confirmation with arrows -->
+  <rect x="350" y="560" width="500" height="50" fill="#E6E6FA" stroke="#6A5ACD" stroke-width="2" rx="8"/>
+  <text x="600" y="580" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#6A5ACD">
+    ✓ Both parties now have identical AES Key
+  </text>
+  <text x="600" y="598" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#6A5ACD">
+    (Ready for secure symmetric encryption)
+  </text>
+  
+  <!-- Arrows pointing to AES key -->
+  <line x1="230" y1="575" x2="340" y2="580" stroke="#6A5ACD" stroke-width="3" marker-end="url(#arrowhead)"/>
+  <line x1="970" y1="575" x2="860" y2="580" stroke="#6A5ACD" stroke-width="3" marker-end="url(#arrowhead)"/>
+  
+  <!-- Step 6: AES Encryption -->
+  <rect x="70" y="640" width="160" height="90" fill="#FFE4E1" stroke="#DC143C" stroke-width="2" rx="5"/>
+  <text x="150" y="660" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#DC143C">
+    Step 6: Encrypt
+  </text>
+  <text x="150" y="675" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#DC143C">
+    Message with AES
+  </text>
+  <text x="150" y="690" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#DC143C">
+    Plaintext: "Hello Bob"
+  </text>
+  <text x="150" y="705" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#DC143C">
+    ↓ AES Encryption ↓
+  </text>
+  <text x="150" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#DC143C">
+    Ciphertext: [encrypted]
+  </text>
+  
+  <!-- Send Encrypted Message with proper arrow -->
+  <line x1="250" y1="685" x2="950" y2="685" stroke="#DC143C" stroke-width="4" marker-end="url(#arrowheadRed)"/>
+  <text x="600" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#DC143C">
+    Encrypted Message Transmission
+  </text>
+  <text x="600" y="705" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#DC143C">
+    Ciphertext sent over insecure channel
+  </text>
+  <text x="600" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#666">
+    (Safe from eavesdropping - only encrypted data visible)
+  </text>
+  
+  <!-- Step 7: AES Decryption -->
+  <rect x="970" y="640" width="160" height="90" fill="#E0FFE0" stroke="#228B22" stroke-width="2" rx="5"/>
+  <text x="1050" y="660" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#228B22">
+    Step 7: Decrypt
+  </text>
+  <text x="1050" y="675" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#228B22">
+    Message with AES
+  </text>
+  <text x="1050" y="690" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#228B22">
+    Ciphertext: [encrypted]
+  </text>
+  <text x="1050" y="705" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#228B22">
+    ↓ AES Decryption ↓
+  </text>
+  <text x="1050" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#228B22">
+    Plaintext: "Hello Bob" ✓
+  </text>
+  
+  <!-- Security Notes -->
+  <rect x="50" y="760" width="1100" height="70" fill="#F5F5F5" stroke="#666" stroke-width="2" rx="8"/>
+  <text x="600" y="780" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#333">
+    🔒 Security Properties &amp; Benefits
+  </text>
+  <text x="600" y="800" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#333">
+    • Private keys (a=6, b=15) never transmitted over network • Shared secret (S=2) computed independently by both parties
+  </text>
+  <text x="600" y="815" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#333">
+    • Eavesdropper cannot derive shared secret from public values (p=23, g=5, A=8, B=19) - requires solving discrete logarithm
+  </text>
+  <text x="600" y="830" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#333">
+    • AES provides authenticated encryption ensuring message confidentiality and integrity
+  </text>
+  
+  <!-- Legend -->
+  <rect x="50" y="850" width="140" height="18" fill="url(#aliceGrad)" stroke="#2E5A8A" stroke-width="1" rx="4"/>
+  <text x="120" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="white">Alice Operations</text>
+  
+  <rect x="210" y="850" width="140" height="18" fill="url(#bobGrad)" stroke="#B23A2E" stroke-width="1" rx="4"/>
+  <text x="280" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="white">Bob Operations</text>
+  
+  <rect x="370" y="850" width="140" height="18" fill="url(#publicGrad)" stroke="#3C8A5C" stroke-width="1" rx="4"/>
+  <text x="440" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="white">Public Information</text>
+  
+  <rect x="530" y="850" width="140" height="18" fill="url(#sharedGrad)" stroke="#CC8A2E" stroke-width="1" rx="4"/>
+  <text x="600" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#8B4513">Shared Secret</text>
+  
+  <rect x="690" y="850" width="140" height="18" fill="#E6E6FA" stroke="#6A5ACD" stroke-width="1" rx="4"/>
+  <text x="760" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#6A5ACD">AES Key Derivation</text>
+</svg>
