@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Database } from "@/src/lib/database";
+import Database from "@/src/config/database";
 import { RoomInvitation } from "@/src/models/room-invitation";
 import { ChatRoom } from "@/src/models/chat-room";
 import { User } from "@/src/models/user";

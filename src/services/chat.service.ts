@@ -403,9 +403,14 @@ export class ChatService {
     // Encrypt content if room is encrypted
     if (room.isEncrypted && isEncrypted && room.encryptionKeyId) {
       try {
+        console.log(
+          `🔐 [CHAT-SERVICE] Starting encryption for message in room: ${room.name} (${roomId})`
+        );
+
         // Generate a temporary shared secret for demonstration
         // In a real implementation, this would be derived from DH key exchange
         const tempSharedSecret = "demo-shared-secret-" + room.encryptionKeyId;
+
         const encryptedContent = EncryptionService.encryptMessage(
           content,
           tempSharedSecret,
@@ -416,9 +421,14 @@ export class ChatService {
         );
         message.encryptedContent = encryptedContent;
 
-        console.log(`🔒 Message encrypted for room ${room.name}`);
+        console.log(
+          `✅ [CHAT-SERVICE] Message encrypted successfully for room ${room.name}`
+        );
       } catch (error) {
-        console.error("❌ Failed to encrypt message:", error);
+        console.error(
+          `❌ [CHAT-SERVICE] Failed to encrypt message for room ${room.name}:`,
+          error
+        );
         // Continue without encryption rather than failing
       }
     }

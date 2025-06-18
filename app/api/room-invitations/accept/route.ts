@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Database } from "@/src/lib/database";
+import Database from "@/src/config/database";
 import { RoomInvitation } from "@/src/models/room-invitation";
 import { ChatRoom } from "@/src/models/chat-room";
 import { User } from "@/src/models/user";
-import { requireAuth } from "@/src/middleware/auth";
+import { requireAuth } from "@/src/middleware/auth.middleware";
 import { MemberRole } from "@/src/enums/user.enum";
 import { EncryptionService } from "@/src/services/encryption.service";
 
 export async function POST(req: NextRequest) {
   try {
     await Database.connect();
-    
+
     const user = await requireAuth(req);
     const { token } = await req.json();
 
@@ -101,7 +101,9 @@ export async function POST(req: NextRequest) {
     invitation.status = "accepted";
     await invitation.save();
 
-    console.log(`✅ User ${user.name} accepted room invitation and joined room ${room.name}`);
+    console.log(
+      `✅ User ${user.name} accepted room invitation and joined room ${room.name}`
+    );
 
     return NextResponse.json({
       success: true,

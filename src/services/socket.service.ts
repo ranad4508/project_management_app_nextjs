@@ -90,18 +90,31 @@ export class SocketService {
       // Message events
       socket.on("message:send", async (data) => {
         try {
+          console.log(
+            `📤 [SOCKET] User ${socket.data.userId} sending message to room ${data.roomId}`
+          );
+
           const message = await this.chatService.sendMessage(
             socket.data.userId,
             data
           );
 
-          // Broadcast to room members
-          socket.to(data.roomId).emit("message:new", message);
-          socket.emit("message:new", message);
+          console.log(`✅ [SOCKET] Message saved with ID: ${message._id}`);
+          console.log(
+            `📡 [SOCKET] Broadcasting message to room: ${data.roomId}`
+          );
+
+          // Broadcast to ALL room members (including sender for confirmation)
+          this.io.to(data.roomId).emit("message:new", message);
+
+          console.log(
+            `📨 [SOCKET] Message broadcasted to room ${data.roomId} members`
+          );
 
           // Stop typing indicator
           this.handleTypingStop(socket, data.roomId);
         } catch (error: any) {
+          console.error(`❌ [SOCKET] Error sending message:`, error);
           socket.emit("error", { message: error.message });
         }
       });
@@ -219,49 +232,96 @@ export class SocketService {
 
   private async joinUserRooms(socket: any) {
     try {
+      console.log(
+        `🏠 [SOCKET] Joining user ${socket.data.userId} to their rooms`
+      );
+
       const rooms = await this.chatService.getUserRooms(socket.data.userId);
+      console.log(
+        `📋 [SOCKET] Found ${rooms.length} rooms for user ${socket.data.userId}`
+      );
 
       for (const room of rooms) {
-        socket.join(room._id.toString());
-        socket.data.rooms.add(room._id.toString());
+        const roomId = room._id.toString();
+        socket.join(roomId);
+        socket.data.rooms.add(roomId);
+
+        console.log(
+          `✅ [SOCKET] User ${socket.data.userId} joined room: ${roomId} (${room.name})`
+        );
 
         // Generate key pair for encrypted rooms
         if (room.isEncrypted) {
           const keyPair = EncryptionService.generateDHKeyPair();
-          socket.data.keyPairs.set(room._id.toString(), keyPair);
+          socket.data.keyPairs.set(roomId, keyPair);
+          console.log(
+            `🔐 [SOCKET] Generated encryption keys for room: ${roomId}`
+          );
         }
       }
+
+      console.log(
+        `🎉 [SOCKET] User ${socket.data.userId} successfully joined ${rooms.length} rooms`
+      );
     } catch (error) {
-      console.error("Error joining user rooms:", error);
+      console.error(
+        `❌ [SOCKET] Error joining user rooms for ${socket.data.userId}:`,
+        error
+      );
     }
   }
 
   private async joinRoom(socket: any, roomId: string) {
-    // Verify room access
-    const room = await this.chatService.getRoomById(roomId, socket.data.userId);
+    try {
+      console.log(
+        `🚪 [SOCKET] User ${socket.data.userId} manually joining room: ${roomId}`
+      );
 
-    socket.join(roomId);
-    socket.data.rooms.add(roomId);
+      // Verify room access
+      const room = await this.chatService.getRoomById(
+        roomId,
+        socket.data.userId
+      );
+      console.log(
+        `✅ [SOCKET] Room access verified for ${roomId}: ${room.name}`
+      );
 
-    // Generate key pair for encrypted room
-    if (room.isEncrypted) {
-      const keyPair = EncryptionService.generateDHKeyPair();
-      socket.data.keyPairs.set(roomId, keyPair);
+      socket.join(roomId);
+      socket.data.rooms.add(roomId);
+      console.log(
+        `🏠 [SOCKET] User ${socket.data.userId} joined room: ${roomId}`
+      );
 
-      // Initiate key exchange with other room members
-      socket.to(roomId).emit("key:exchange", {
-        userId: socket.data.userId,
-        publicKey: keyPair.publicKey,
-        timestamp: new Date(),
+      // Generate key pair for encrypted room
+      if (room.isEncrypted) {
+        const keyPair = EncryptionService.generateDHKeyPair();
+        socket.data.keyPairs.set(roomId, keyPair);
+        console.log(
+          `🔐 [SOCKET] Generated new encryption keys for room: ${roomId}`
+        );
+
+        // Initiate key exchange with other room members
+        socket.to(roomId).emit("key:exchange", {
+          userId: socket.data.userId,
+          publicKey: keyPair.publicKey,
+          timestamp: new Date(),
+        });
+        console.log(`🔄 [SOCKET] Initiated key exchange for room: ${roomId}`);
+      }
+
+      // Notify room about user joining
+      socket.to(roomId).emit("room:joined", roomId, {
+        _id: socket.data.userId,
+        name: socket.data.userName,
+        avatar: socket.data.userAvatar,
       });
+      console.log(
+        `📢 [SOCKET] Notified room ${roomId} about user ${socket.data.userId} joining`
+      );
+    } catch (error) {
+      console.error(`❌ [SOCKET] Error joining room ${roomId}:`, error);
+      throw error;
     }
-
-    // Notify room about user joining
-    socket.to(roomId).emit("room:joined", roomId, {
-      _id: socket.data.userId,
-      name: socket.data.userName,
-      avatar: socket.data.userAvatar,
-    });
 
     // Update last read timestamp
     await this.chatService.updateLastRead(roomId, socket.data.userId);
