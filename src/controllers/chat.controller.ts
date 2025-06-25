@@ -186,6 +186,24 @@ export class ChatController {
     }
   );
 
+  deleteRoom = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      await this.chatService.deleteRoom(roomId, user.id);
+
+      return NextResponse.json({
+        success: true,
+        message: "Room deleted successfully",
+      });
+    }
+  );
+
   regenerateEncryptionKeys = asyncHandler(
     async (
       req: NextRequest,

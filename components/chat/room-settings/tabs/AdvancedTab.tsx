@@ -10,7 +10,25 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Download, AlertTriangle, Archive } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Trash2,
+  Download,
+  AlertTriangle,
+  Archive,
+  MessageSquareX,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { TabProps } from "../types";
@@ -34,6 +52,9 @@ export default function AdvancedTab({
   isAdmin,
 }: AdvancedTabProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [showDeleteRoomDialog, setShowDeleteRoomDialog] = useState(false);
+  const [showDeleteConversationDialog, setShowDeleteConversationDialog] =
+    useState(false);
 
   const canDeleteRoom = isOwner; // Only owners can delete rooms
 
@@ -77,17 +98,17 @@ export default function AdvancedTab({
   };
 
   const handleDeleteConversation = async () => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete your conversation in "${room.name}"? This will only remove messages from your view.`
-    );
-
-    if (!confirmed) return;
-
     setIsLoading(true);
     try {
       await deleteConversation(room._id);
-      toast.success("Conversation deleted from your view");
-      // Redirect or close dialog would happen here
+      toast.success(
+        "The chat history for this conversation has been deleted successfully from your view"
+      );
+      setShowDeleteConversationDialog(false);
+      // Optionally refresh the page to show empty conversation
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error) {
       toast.error("Failed to delete conversation");
       console.error("Error deleting conversation:", error);
@@ -99,17 +120,16 @@ export default function AdvancedTab({
   const handleDeleteRoom = async () => {
     if (!canDeleteRoom) return;
 
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${room.name}"? This action cannot be undone and will delete the room for all members.`
-    );
-
-    if (!confirmed) return;
-
     setIsLoading(true);
     try {
       await deleteRoom(room._id);
-      toast.success("Room has been deleted");
-      // Redirect or close dialog would happen here
+      toast.success("Room has been permanently deleted successfully");
+      setShowDeleteRoomDialog(false);
+      // Redirect to chat page after successful deletion
+      setTimeout(() => {
+        window.location.href =
+          "/dashboard/workspaces/" + room.workspace + "/chat";
+      }, 1000);
     } catch (error) {
       toast.error("Failed to delete room");
       console.error("Error deleting room:", error);
@@ -229,15 +249,56 @@ export default function AdvancedTab({
                     members
                   </p>
                 </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDeleteRoom}
-                  disabled={isLoading}
+                <AlertDialog
+                  open={showDeleteRoomDialog}
+                  onOpenChange={setShowDeleteRoomDialog}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Room
-                </Button>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={isLoading}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Room
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-red-600">
+                        Delete Room Permanently?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently
+                        delete the room "{room.name}", all messages, files, and
+                        remove all members. All chat history will be lost
+                        forever.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isLoading}>
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteRoom}
+                        disabled={isLoading}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Deleting...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Room
+                          </>
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </>
           )}
@@ -250,15 +311,52 @@ export default function AdvancedTab({
                   Remove this conversation from your view only
                 </p>
               </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDeleteConversation}
-                disabled={isLoading}
+              <AlertDialog
+                open={showDeleteConversationDialog}
+                onOpenChange={setShowDeleteConversationDialog}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Conversation
-              </Button>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={isLoading}>
+                    <MessageSquareX className="h-4 w-4 mr-2" />
+                    Delete Conversation
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-red-600">
+                      Delete Your Conversation?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will remove all messages from your view in "
+                      {room.name}". This action only affects your account -
+                      other members will still see the messages. This action
+                      cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isLoading}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteConversation}
+                      disabled={isLoading}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquareX className="mr-2 h-4 w-4" />
+                          Delete Conversation
+                        </>
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           )}
         </CardContent>

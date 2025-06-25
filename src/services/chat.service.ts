@@ -24,7 +24,7 @@ import { User } from "@/src/models/user";
 import { EmailService } from "./email.service";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 export class ChatService {
   private fileUploadService: FileUploadService;
@@ -212,34 +212,6 @@ export class ChatService {
     ]);
 
     return room.toObject();
-  }
-
-  /**
-   * Delete room
-   */
-  async deleteRoom(roomId: string, userId: string): Promise<void> {
-    const room = await ChatRoom.findById(roomId);
-
-    if (!room) {
-      throw new NotFoundError("Room not found");
-    }
-
-    if (room.createdBy.toString() !== userId) {
-      throw new AuthorizationError("Only room creator can delete the room");
-    }
-
-    if (room.type === RoomType.GENERAL) {
-      throw new ValidationError("Cannot delete general room");
-    }
-
-    // Delete all messages in the room
-    await ChatMessage.deleteMany({ room: roomId });
-
-    // Delete room invitations
-    await RoomInvitation.deleteMany({ room: roomId });
-
-    // Delete the room
-    await ChatRoom.findByIdAndDelete(roomId);
   }
 
   /**
@@ -450,7 +422,7 @@ export class ChatService {
       ["Exported At", new Date(exportData.exportedAt).toLocaleString()],
     ];
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [roomInfo[0]],
       body: roomInfo.slice(1),
       startY: 50,
@@ -476,7 +448,7 @@ export class ChatService {
       ];
     });
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [["Date", "Time", "Sender", "Message", "Type", "Encrypted"]],
       body: messagesData,
       startY: 30,
@@ -501,7 +473,7 @@ export class ChatService {
         new Date(member.joinedAt).toLocaleString(),
       ]) || [];
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [["Name", "Email", "Role", "Joined At"]],
       body: membersData,
       startY: 30,
@@ -539,6 +511,34 @@ export class ChatService {
     );
 
     console.log(`🗑️ User ${userId} deleted conversation in room ${roomId}`);
+  }
+
+  /**
+   * Delete entire room (owner only)
+   */
+  async deleteRoom(roomId: string, userId: string): Promise<void> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if user is the room owner
+    const isOwner = room.createdBy && room.createdBy.toString() === userId;
+
+    if (!isOwner) {
+      throw new AuthorizationError(
+        "Only room owners can delete the entire room"
+      );
+    }
+
+    // Delete all messages in the room
+    await ChatMessage.deleteMany({ room: roomId });
+
+    // Delete the room itself
+    await ChatRoom.findByIdAndDelete(roomId);
+
+    console.log(`🗑️ Room ${roomId} deleted by owner ${userId}`);
   }
 
   /**
