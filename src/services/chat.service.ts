@@ -1355,6 +1355,30 @@ export class ChatService {
       `🚪 [CHAT-SERVICE] Member ${removedMember.user.name} removed from room ${room.name} by owner ${ownerId}`
     );
 
+    // Emit socket event to notify the removed user
+    const io = (global as any).io;
+    if (io) {
+      // Notify the removed user to refresh their room list
+      io.to(memberUserId).emit("member:removed", {
+        roomId,
+        roomName: room.name,
+        removedBy: ownerId,
+        message: `You have been removed from room "${room.name}"`,
+      });
+
+      // Notify other room members about the removal
+      io.to(roomId).emit("member:left", {
+        roomId,
+        userId: memberUserId,
+        userName: removedMember.user.name,
+        removedBy: ownerId,
+      });
+
+      console.log(
+        `📡 [CHAT-SERVICE] Socket notifications sent for member removal`
+      );
+    }
+
     return {
       message: `Member ${removedMember.user.name} removed successfully`,
       roomId,

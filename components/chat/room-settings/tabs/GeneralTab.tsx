@@ -6,7 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Save, Edit3 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,7 +39,7 @@ export default function GeneralTab({
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const canEdit = isOwner; // Only owners can edit general settings
+  const canEdit = isOwner || isAdmin; // Owners and admins can edit general settings
 
   const handleSave = async () => {
     if (!onRoomUpdate) return;

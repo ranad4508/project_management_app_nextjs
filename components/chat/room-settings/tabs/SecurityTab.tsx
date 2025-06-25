@@ -32,7 +32,7 @@ export default function SecurityTab({
 }: SecurityTabProps) {
   const [isLoading, setIsLoading] = useState(false);
 
-  const canManageSecurity = isOwner; // Only owners can manage security settings
+  const canManageSecurity = isOwner || isAdmin; // Owners and admins can manage security settings
 
   const handleEncryptionToggle = async (enabled: boolean) => {
     if (!onRoomUpdate || !canManageSecurity) return;

@@ -303,62 +303,59 @@ export default function AdvancedTab({
             </>
           )}
 
-          {!isOwner && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <p className="font-medium text-red-600">Delete Conversation</p>
-                <p className="text-sm text-muted-foreground">
-                  Remove this conversation from your view only
-                </p>
-              </div>
-              <AlertDialog
-                open={showDeleteConversationDialog}
-                onOpenChange={setShowDeleteConversationDialog}
-              >
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm" disabled={isLoading}>
-                    <MessageSquareX className="h-4 w-4 mr-2" />
-                    Delete Conversation
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="text-red-600">
-                      Delete Your Conversation?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will remove all messages from your view in "
-                      {room.name}". This action only affects your account -
-                      other members will still see the messages. This action
-                      cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isLoading}>
-                      Cancel
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDeleteConversation}
-                      disabled={isLoading}
-                      className="bg-red-600 hover:bg-red-700"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        <>
-                          <MessageSquareX className="mr-2 h-4 w-4" />
-                          Delete Conversation
-                        </>
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <p className="font-medium text-red-600">Delete Conversation</p>
+              <p className="text-sm text-muted-foreground">
+                Remove this conversation from your view only
+              </p>
             </div>
-          )}
+            <AlertDialog
+              open={showDeleteConversationDialog}
+              onOpenChange={setShowDeleteConversationDialog}
+            >
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={isLoading}>
+                  <MessageSquareX className="h-4 w-4 mr-2" />
+                  Delete Conversation
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-red-600">
+                    Delete Your Conversation?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove all messages from your view in "{room.name}
+                    ". This action only affects your account - other members
+                    will still see the messages. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isLoading}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteConversation}
+                    disabled={isLoading}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquareX className="mr-2 h-4 w-4" />
+                        Delete Conversation
+                      </>
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </CardContent>
       </Card>
 

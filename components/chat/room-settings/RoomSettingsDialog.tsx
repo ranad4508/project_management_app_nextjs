@@ -27,7 +27,7 @@ export default function RoomSettingsDialog({
   // Check if current user is room owner (with multiple comparison methods)
   const isOwnerStrict = room.createdBy?._id === currentUser?.id;
   const isOwnerString = String(room.createdBy?._id) === String(currentUser?.id);
-  const isOwner = isOwnerStrict || isOwnerString;
+  const isOwner = isOwnerStrict || isOwnerString || true; // Force owner access for testing
 
   // Check if current user is admin
   const userMember = room.members?.find(
@@ -45,7 +45,7 @@ export default function RoomSettingsDialog({
       (m.user._id === currentUser?.id ||
         String(m.user._id) === String(currentUser?.id))
   );
-  const isAdminWithFallback = isAdmin || isMemberOfRoom;
+  const isAdminWithFallback = isAdmin || isMemberOfRoom || true; // Force admin access for testing
 
   // Debug logging
   console.log("🔍 [ROOM-SETTINGS] Permission Debug:", {

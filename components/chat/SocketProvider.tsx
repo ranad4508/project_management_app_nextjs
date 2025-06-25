@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   setConnected,
   addMessage,
@@ -29,6 +31,7 @@ import type {
   TypingIndicator,
   OnlineUser,
 } from "@/src/types/chat.types";
+import { chatApi } from "@/src/store/api/chatApi";
 
 // Dynamic import for socket.io-client to avoid SSR issues
 let io: any = null;
@@ -67,6 +70,7 @@ interface SocketProviderProps {
 export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
   const dispatch = useDispatch();
   const { data: session, status } = useSession();
+  const router = useRouter();
   const socketRef = useRef<any>(null);
   const { activeRoomId } = useSelector((state: RootState) => state.chat);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -244,6 +248,39 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
           (messageId: string, reactionId: string) => {
             socketLog("👎 Reaction removed:", { messageId, reactionId });
             dispatch(removeReaction({ messageId, reactionId }));
+          }
+        );
+
+        // Member removal events
+        socket.on(
+          "member:removed",
+          (data: { roomId: string; roomName: string; message: string }) => {
+            socketLog("🚪 Member removed from room:", data);
+            toast.error(data.message);
+
+            // Force refresh the room list by invalidating cache
+            dispatch(chatApi.util.invalidateTags(["ChatRoom"]));
+
+            // If user is currently in the removed room, redirect them
+            if (activeRoomId === data.roomId) {
+              router.push("/dashboard/workspaces/" + workspaceId + "/chat");
+            }
+          }
+        );
+
+        socket.on(
+          "member:left",
+          (data: { roomId: string; userId: string; userName: string }) => {
+            socketLog("👋 Member left room:", data);
+
+            // Refresh room members if we're viewing this room
+            if (activeRoomId === data.roomId) {
+              dispatch(
+                chatApi.util.invalidateTags([
+                  { type: "RoomMembers", id: data.roomId },
+                ])
+              );
+            }
           }
         );
 
