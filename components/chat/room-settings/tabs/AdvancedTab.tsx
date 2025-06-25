@@ -56,7 +56,7 @@ export default function AdvancedTab({
   const [showDeleteConversationDialog, setShowDeleteConversationDialog] =
     useState(false);
 
-  const canDeleteRoom = isOwner; // Only owners can delete rooms
+  const canDeleteRoom = isOwner || isAdmin; // Owners and admins can delete rooms
 
   const handleExportExcel = async () => {
     setIsLoading(true);
@@ -85,10 +85,20 @@ export default function AdvancedTab({
   };
 
   const handleArchiveRoom = async () => {
+    if (!isOwner) {
+      toast.error("Only room owners can archive the room");
+      return;
+    }
+
     setIsLoading(true);
     try {
       await archiveRoom(room._id);
-      toast.success("Room has been archived");
+      toast.success("Room has been archived successfully");
+      // Redirect to chat page after successful archiving
+      setTimeout(() => {
+        window.location.href =
+          "/dashboard/workspaces/" + room.workspace + "/chat";
+      }, 1000);
     } catch (error) {
       toast.error("Failed to archive room");
       console.error("Error archiving room:", error);
@@ -215,92 +225,93 @@ export default function AdvancedTab({
         <CardHeader>
           <CardTitle className="text-red-600">Danger Zone</CardTitle>
           <CardDescription>
-            {isOwner
+            {canDeleteRoom
               ? "Irreversible actions that affect the entire room"
               : "Actions that affect your participation in this room"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Archive Room - Owner Only */}
           {isOwner && (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <p className="font-medium">Archive Room</p>
-                  <p className="text-sm text-muted-foreground">
-                    Archive this room to make it read-only
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleArchiveRoom}
-                  disabled={isLoading}
-                >
-                  <Archive className="h-4 w-4 mr-2" />
-                  Archive
-                </Button>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <p className="font-medium">Archive Room</p>
+                <p className="text-sm text-muted-foreground">
+                  Archive this room to make it read-only (Owner only)
+                </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleArchiveRoom}
+                disabled={isLoading || !isOwner}
+              >
+                <Archive className="h-4 w-4 mr-2" />
+                {isLoading ? "Archiving..." : "Archive"}
+              </Button>
+            </div>
+          )}
 
-              <div className="flex items-center justify-between pt-4 border-t border-red-200">
-                <div className="space-y-0.5">
-                  <p className="font-medium text-red-600">Delete Room</p>
-                  <p className="text-sm text-muted-foreground">
-                    Permanently delete this room and all its data for all
-                    members
-                  </p>
-                </div>
-                <AlertDialog
-                  open={showDeleteRoomDialog}
-                  onOpenChange={setShowDeleteRoomDialog}
-                >
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={isLoading}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Room
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="text-red-600">
-                        Delete Room Permanently?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently
-                        delete the room "{room.name}", all messages, files, and
-                        remove all members. All chat history will be lost
-                        forever.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isLoading}>
-                        Cancel
-                      </AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDeleteRoom}
-                        disabled={isLoading}
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        {isLoading ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Deleting...
-                          </>
-                        ) : (
-                          <>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete Room
-                          </>
-                        )}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+          {/* Delete Room - Owner and Admin */}
+          {canDeleteRoom && (
+            <div
+              className={`flex items-center justify-between ${
+                isOwner ? "pt-4 border-t border-red-200" : ""
+              }`}
+            >
+              <div className="space-y-0.5">
+                <p className="font-medium text-red-600">Delete Room</p>
+                <p className="text-sm text-muted-foreground">
+                  Permanently delete this room and all its data for all members
+                  (Owner and Admin only)
+                </p>
               </div>
-            </>
+              <AlertDialog
+                open={showDeleteRoomDialog}
+                onOpenChange={setShowDeleteRoomDialog}
+              >
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={isLoading}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Room
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-red-600">
+                      Delete Room Permanently?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action cannot be undone. This will permanently delete
+                      the room "{room.name}", all messages, files, and remove
+                      all members. All chat history will be lost forever.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isLoading}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteRoom}
+                      disabled={isLoading}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Room
+                        </>
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           )}
 
           <div className="flex items-center justify-between">

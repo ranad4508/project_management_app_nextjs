@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useUpdateRoomMutation,
   useDeleteRoomMutation,
+  useArchiveRoomMutation,
   useGetRoomMembersQuery,
   useInviteMemberByEmailMutation,
   useRemoveMemberFromRoomMutation,
@@ -75,6 +76,7 @@ export function RoomSettingsDialog({
   const router = useRouter();
   const [updateRoom, { isLoading: isUpdating }] = useUpdateRoomMutation();
   const [deleteRoom, { isLoading: isDeleting }] = useDeleteRoomMutation();
+  const [archiveRoom, { isLoading: isArchiving }] = useArchiveRoomMutation();
 
   // Member management hooks
   const { data: membersData, refetch: refetchMembers } = useGetRoomMembersQuery(
@@ -195,16 +197,23 @@ export function RoomSettingsDialog({
   };
 
   const handleArchiveRoom = async () => {
+    if (!isOwner) {
+      toast.error("Only room owners can archive the room");
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      await updateRoom({
-        roomId: room._id,
-        data: { isArchived: true },
-      }).unwrap();
+      await archiveRoom(room._id).unwrap();
 
       toast.success("Room archived successfully");
       setShowArchiveConfirm(false);
       onOpenChange(false);
+
+      // Redirect to chat page after successful archiving
+      setTimeout(() => {
+        router.push(`/dashboard/workspaces/${room.workspace}/chat`);
+      }, 1000);
     } catch (error: any) {
       console.error("Error archiving room:", error);
       toast.error(error.message || "Failed to archive room");
@@ -979,8 +988,8 @@ export function RoomSettingsDialog({
                 </p>
               </div>
 
-              {/* Archive Room - Only for Room Owner or Admin */}
-              {(isAdmin || isOwner) && !showArchiveConfirm && (
+              {/* Archive Room - Only for Room Owner */}
+              {isOwner && !showArchiveConfirm && (
                 <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
                   <div className="flex items-start space-x-3">
                     <Archive className="h-5 w-5 text-orange-600 mt-0.5" />

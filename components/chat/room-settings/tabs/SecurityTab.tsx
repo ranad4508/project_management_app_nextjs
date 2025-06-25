@@ -12,6 +12,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Shield, Key, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +42,7 @@ export default function SecurityTab({
   isAdmin,
 }: SecurityTabProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
 
   const canManageSecurity = isOwner || isAdmin; // Owners and admins can manage security settings
 
@@ -58,17 +70,12 @@ export default function SecurityTab({
 
   const handleRegenerateKeys = async () => {
     if (!canManageSecurity) return;
+    setShowRegenerateDialog(true);
+  };
 
-    const confirmed = window.confirm(
-      `Are you sure you want to regenerate encryption keys for "${room.name}"?\n\n` +
-        "This will make all existing encrypted messages unreadable. " +
-        "Only new messages will be encrypted with the new keys. " +
-        "This action cannot be undone."
-    );
-
-    if (!confirmed) return;
-
+  const confirmRegenerateKeys = async () => {
     setIsLoading(true);
+    setShowRegenerateDialog(false);
     try {
       await regenerateEncryptionKeys(room._id);
       toast.success("Encryption keys have been regenerated successfully");
@@ -142,15 +149,52 @@ export default function SecurityTab({
                         messages unreadable.
                       </p>
                     </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleRegenerateKeys}
-                      disabled={isLoading}
+                    <AlertDialog
+                      open={showRegenerateDialog}
+                      onOpenChange={setShowRegenerateDialog}
                     >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      {isLoading ? "Regenerating..." : "Regenerate Keys"}
-                    </Button>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={isLoading}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          {isLoading ? "Regenerating..." : "Regenerate Keys"}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="text-red-600">
+                            Regenerate Encryption Keys?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to regenerate encryption keys
+                            for "{room.name}"?
+                            <br />
+                            <br />
+                            <strong>Warning:</strong> This will make all
+                            existing encrypted messages unreadable. Only new
+                            messages will be encrypted with the new keys.
+                            <br />
+                            <br />
+                            <strong>This action cannot be undone.</strong>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel disabled={isLoading}>
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={confirmRegenerateKeys}
+                            disabled={isLoading}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            {isLoading ? "Regenerating..." : "Regenerate Keys"}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
 
                   <div className="flex items-start space-x-3 p-3 bg-red-50 rounded-lg">

@@ -111,6 +111,23 @@ export const chatApi = createApi({
       },
     }),
 
+    archiveRoom: builder.mutation<ChatRoom, string>({
+      query: (roomId) => ({
+        url: `rooms/${roomId}/archive`,
+        method: "POST",
+      }),
+      invalidatesTags: (_, __, roomId) => [
+        { type: "ChatRoom", id: roomId },
+        "ChatRoom",
+      ],
+      transformResponse: (response: ApiResponse<ChatRoom>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to archive room");
+      },
+    }),
+
     // Message management with pagination
     getRoomMessages: builder.query<
       MessageListResponse,
@@ -369,6 +386,7 @@ export const {
   useCreateRoomMutation,
   useUpdateRoomMutation,
   useDeleteRoomMutation,
+  useArchiveRoomMutation,
   useGetRoomMessagesQuery,
   useSendMessageMutation,
   useAddReactionMutation,

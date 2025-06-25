@@ -187,21 +187,28 @@ export class ChatService {
   }
 
   /**
-   * Update room
+   * Update room (admin/owner/workspace owner)
    */
   async updateRoom(
     roomId: string,
     userId: string,
     data: UpdateRoomData
   ): Promise<ChatRoomType> {
-    const room = await ChatRoom.findById(roomId);
+    const room = await ChatRoom.findById(roomId).populate("workspace");
 
     if (!room) {
       throw new NotFoundError("Room not found");
     }
 
-    if (!room.isAdmin(userId)) {
-      throw new AuthorizationError("Admin access required");
+    // Check if user has admin access to the room OR is workspace owner
+    const isRoomAdmin = room.isAdmin(userId);
+    const workspace = room.workspace as any;
+    const isWorkspaceOwner = workspace?.owner?.toString() === userId;
+
+    if (!isRoomAdmin && !isWorkspaceOwner) {
+      throw new AuthorizationError(
+        "Only room admins, room owners, and workspace owners can update room settings"
+      );
     }
 
     Object.assign(room, data);
@@ -321,10 +328,81 @@ export class ChatService {
       );
     }
 
+    console.log(
+      `🔄 [CHAT-SERVICE] Regenerating encryption keys for room ${roomId}`
+    );
+
     // Generate new encryption key ID
     const crypto = require("crypto");
-    room.encryptionKeyId = crypto.randomBytes(16).toString("hex");
+    const newKeyId = crypto.randomBytes(16).toString("hex");
+
+    // Store the old key ID for reference
+    const oldKeyId = room.encryptionKeyId;
+    room.encryptionKeyId = newKeyId;
+
+    console.log(`🔑 [CHAT-SERVICE] New key ID generated: ${newKeyId}`);
+    console.log(`🔑 [CHAT-SERVICE] Old key ID: ${oldKeyId}`);
+
+    // Import key management service and regenerate keys
+    const { KeyManagementService } = await import("./key-management.service");
+
+    // Clean up very old keys but keep recent versions for backward compatibility
+    await KeyManagementService.cleanupRoomKeys(roomId, 5);
+
+    // Generate new key pairs for all members
+    for (const member of room.members) {
+      try {
+        const keyPair = await KeyManagementService.generateUserKeyPairForRoom(
+          member.user.toString(),
+          roomId
+        );
+
+        // Update member's public key in the room
+        const memberIndex = room.members.findIndex(
+          (m: any) => m.user.toString() === member.user.toString()
+        );
+        if (memberIndex !== -1) {
+          room.members[memberIndex].publicKey = keyPair.publicKey;
+        }
+
+        console.log(
+          `🔑 [CHAT-SERVICE] Generated new key pair for member ${member.user}`
+        );
+      } catch (error) {
+        console.error(
+          `❌ [CHAT-SERVICE] Failed to generate key pair for member ${member.user}:`,
+          error
+        );
+      }
+    }
+
     await room.save();
+
+    // Perform key exchange for all member pairs
+    for (const member of room.members) {
+      try {
+        // Generate a private key for this member (simplified approach)
+        const memberKeyPair = EncryptionService.generateDHKeyPair();
+
+        await KeyManagementService.initializeRoomKeyExchange(
+          member.user.toString(),
+          roomId,
+          memberKeyPair.privateKey
+        );
+        console.log(
+          `🤝 [CHAT-SERVICE] Key exchange completed for member ${member.user}`
+        );
+      } catch (error) {
+        console.error(
+          `❌ [CHAT-SERVICE] Key exchange failed for member ${member.user}:`,
+          error
+        );
+      }
+    }
+
+    console.log(
+      `✅ [CHAT-SERVICE] Encryption keys regenerated successfully for room ${roomId}`
+    );
 
     await room.populate([
       { path: "createdBy", select: "name email avatar" },
@@ -514,21 +592,33 @@ export class ChatService {
   }
 
   /**
-   * Delete entire room (owner only)
+   * Delete entire room (owner, admin, and workspace owner)
    */
   async deleteRoom(roomId: string, userId: string): Promise<void> {
-    const room = await ChatRoom.findById(roomId);
+    const room = await ChatRoom.findById(roomId)
+      .populate("members.user", "name email")
+      .populate("workspace");
 
     if (!room) {
       throw new NotFoundError("Room not found");
     }
 
     // Check if user is the room owner
-    const isOwner = room.createdBy && room.createdBy.toString() === userId;
+    const isRoomOwner = room.createdBy && room.createdBy.toString() === userId;
 
-    if (!isOwner) {
+    // Check if user is an admin
+    const userMember = room.members.find(
+      (m: any) => m.user && m.user._id.toString() === userId
+    );
+    const isAdmin = userMember?.role === "admin";
+
+    // Check if user is workspace owner
+    const workspace = room.workspace as any;
+    const isWorkspaceOwner = workspace?.owner?.toString() === userId;
+
+    if (!isRoomOwner && !isAdmin && !isWorkspaceOwner) {
       throw new AuthorizationError(
-        "Only room owners can delete the entire room"
+        "Only room owners, admins, and workspace owners can delete the entire room"
       );
     }
 
@@ -538,7 +628,12 @@ export class ChatService {
     // Delete the room itself
     await ChatRoom.findByIdAndDelete(roomId);
 
-    console.log(`🗑️ Room ${roomId} deleted by owner ${userId}`);
+    const deleterRole = isRoomOwner
+      ? "room owner"
+      : isWorkspaceOwner
+      ? "workspace owner"
+      : "admin";
+    console.log(`🗑️ Room ${roomId} deleted by ${deleterRole} ${userId}`);
   }
 
   /**
@@ -850,137 +945,167 @@ export class ChatService {
     ]);
 
     // Decrypt messages if room is encrypted
-    const decryptedMessages = messages.map((msg) => {
-      const messageObj = msg.toObject();
+    const decryptedMessages = await Promise.all(
+      messages.map(async (msg) => {
+        const messageObj = msg.toObject();
 
-      if (
-        room.isEncrypted &&
-        messageObj.encryptedContent &&
-        room.encryptionKeyId
-      ) {
-        try {
-          // Debug: Log the structure of encryptedContent
-          console.log(
-            `🔍 [CHAT-SERVICE] Debug - Message ${messageObj._id} encryptedContent structure:`,
-            JSON.stringify(messageObj.encryptedContent, null, 2)
-          );
-
-          // Try new consistent shared secret first
-          const consistentSharedSecret = crypto
-            .createHash("sha256")
-            .update(`${room.encryptionKeyId}-${roomId}-consistent-key`)
-            .digest("hex");
-
-          console.log(
-            `🔑 [CHAT-SERVICE] Using consistent shared secret for decryption in room ${room.name}`
-          );
-
+        if (
+          room.isEncrypted &&
+          messageObj.encryptedContent &&
+          room.encryptionKeyId
+        ) {
           try {
+            // Debug: Log the structure of encryptedContent
             console.log(
-              `🔍 [CHAT-SERVICE] Attempting decryption with consistent shared secret for message ${messageObj._id}`
+              `🔍 [CHAT-SERVICE] Debug - Message ${messageObj._id} encryptedContent structure:`,
+              JSON.stringify(messageObj.encryptedContent, null, 2)
             );
 
-            const decryptedContent = EncryptionService.decryptMessage(
-              messageObj.encryptedContent,
-              consistentSharedSecret,
-              userId,
-              roomId,
-              messageObj._id
+            // Import KeyManagementService
+            const { KeyManagementService } = await import(
+              "./key-management.service"
             );
-            messageObj.content = decryptedContent;
 
-            console.log(
-              `🔓 Message decrypted - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
-            );
-          } catch (newKeyError) {
-            // Try multiple fallback shared secret patterns for backward compatibility
-            const fallbackSecrets = [
-              // Original demo patterns
-              "demo-shared-secret-" + room.encryptionKeyId,
-              "demo-shared-secret",
+            // Try to get the proper shared secret from key management
+            let sharedSecret =
+              await KeyManagementService.getPrimarySharedSecret(userId, roomId);
 
-              // Direct key patterns
-              room.encryptionKeyId,
-              `${room.encryptionKeyId}-demo`,
-
-              // Room-based patterns
-              `room-${roomId}-key`,
-              `${roomId}-shared-secret`,
-
-              // Legacy patterns that might have been used
-              `${roomId}-${room.encryptionKeyId}`,
-              `${room.encryptionKeyId}-${roomId}`,
-
-              // Simple concatenations
-              roomId + room.encryptionKeyId,
-              room.encryptionKeyId + roomId,
-
-              // Hashed versions of simple patterns
-              crypto
+            // If no shared secret found, try the current consistent pattern
+            if (!sharedSecret) {
+              console.log(
+                `⚠️ [CHAT-SERVICE] No shared secret found in key management, using consistent pattern for room ${room.name}`
+              );
+              sharedSecret = crypto
                 .createHash("sha256")
-                .update(room.encryptionKeyId)
-                .digest("hex"),
-              crypto.createHash("sha256").update(roomId).digest("hex"),
-              crypto
-                .createHash("sha256")
-                .update(`${roomId}-${room.encryptionKeyId}`)
-                .digest("hex"),
+                .update(`${room.encryptionKeyId}-${roomId}-consistent-key`)
+                .digest("hex");
+            } else {
+              console.log(
+                `🔑 [CHAT-SERVICE] Using shared secret from key management for decryption in room ${room.name}`
+              );
+            }
 
-              // Default patterns
-              "default-shared-secret",
-              "shared-secret",
-              "encryption-key",
-            ];
+            try {
+              console.log(
+                `🔍 [CHAT-SERVICE] Attempting decryption with shared secret for message ${messageObj._id}`
+              );
 
-            let decrypted = false;
+              const decryptedContent = EncryptionService.decryptMessage(
+                messageObj.encryptedContent,
+                sharedSecret,
+                userId,
+                roomId,
+                messageObj._id
+              );
+              messageObj.content = decryptedContent;
 
-            for (const fallbackSecret of fallbackSecrets) {
-              try {
-                console.log(
-                  `🔄 [CHAT-SERVICE] Trying fallback secret pattern for message ${
-                    messageObj._id
-                  }: ${fallbackSecret.substring(0, 10)}...`
+              console.log(
+                `🔓 Message decrypted - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
+              );
+            } catch (primaryKeyError) {
+              // Try key versioning - look for older keys
+              console.log(
+                `⚠️ [CHAT-SERVICE] Primary key failed, trying key versioning for message ${messageObj._id}`
+              );
+
+              // Try to find keys with different versions
+              const keyVersions =
+                await KeyManagementService.getAllKeyVersions?.(userId, roomId);
+
+              let decrypted = false;
+
+              if (keyVersions && keyVersions.length > 0) {
+                for (const versionedKey of keyVersions) {
+                  try {
+                    console.log(
+                      `🔄 [CHAT-SERVICE] Trying key version ${versionedKey.version} for message ${messageObj._id}`
+                    );
+
+                    const decryptedContent = EncryptionService.decryptMessage(
+                      messageObj.encryptedContent,
+                      versionedKey.sharedSecret,
+                      userId,
+                      roomId,
+                      messageObj._id
+                    );
+                    messageObj.content = decryptedContent;
+                    decrypted = true;
+
+                    console.log(
+                      `🔓 Message decrypted with key version ${versionedKey.version} - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}`
+                    );
+                    break;
+                  } catch (versionError) {
+                    // Continue to next version
+                    continue;
+                  }
+                }
+              }
+
+              // If key versioning fails, try a few essential fallback patterns
+              if (!decrypted) {
+                const essentialFallbacks = [
+                  // Current key pattern
+                  room.encryptionKeyId,
+                  // Room-based patterns
+                  `${roomId}-${room.encryptionKeyId}`,
+                  `${room.encryptionKeyId}-${roomId}`,
+                  // Hashed version of current key
+                  crypto
+                    .createHash("sha256")
+                    .update(room.encryptionKeyId)
+                    .digest("hex"),
+                ];
+
+                for (const fallbackSecret of essentialFallbacks) {
+                  try {
+                    console.log(
+                      `🔄 [CHAT-SERVICE] Trying essential fallback for message ${
+                        messageObj._id
+                      }: ${fallbackSecret.substring(0, 10)}...`
+                    );
+
+                    const decryptedContent = EncryptionService.decryptMessage(
+                      messageObj.encryptedContent,
+                      fallbackSecret,
+                      userId,
+                      roomId,
+                      messageObj._id
+                    );
+                    messageObj.content = decryptedContent;
+                    decrypted = true;
+
+                    console.log(
+                      `🔓 Message decrypted with essential fallback - Room: ${
+                        room.name
+                      } (${roomId}), Message ID: ${
+                        messageObj._id
+                      }, Pattern: ${fallbackSecret.substring(0, 10)}...`
+                    );
+                    break;
+                  } catch (fallbackError) {
+                    // Continue to next pattern
+                    continue;
+                  }
+                }
+              }
+
+              if (!decrypted) {
+                console.error(
+                  `❌ Failed to decrypt message ${messageObj._id} with all available keys`
                 );
-
-                const decryptedContent = EncryptionService.decryptMessage(
-                  messageObj.encryptedContent,
-                  fallbackSecret,
-                  userId,
-                  roomId,
-                  messageObj._id
-                );
-                messageObj.content = decryptedContent;
-                decrypted = true;
-
-                console.log(
-                  `🔓 Message decrypted with fallback key - Room: ${
-                    room.name
-                  } (${roomId}), Message ID: ${
-                    messageObj._id
-                  }, Pattern: ${fallbackSecret.substring(0, 10)}...`
-                );
-                break;
-              } catch (fallbackError) {
-                // Continue to next pattern
-                continue;
+                messageObj.content = "[Encrypted message - unable to decrypt]";
               }
             }
-
-            if (!decrypted) {
-              console.error(
-                `❌ Failed to decrypt message ${messageObj._id} with all known patterns`
-              );
-              messageObj.content = "[Encrypted message - unable to decrypt]";
-            }
+          } catch (error) {
+            console.error("❌ Failed to decrypt message:", error);
+            messageObj.content = "[Encrypted message - decryption failed]";
           }
-        } catch (error) {
-          console.error("❌ Failed to decrypt message:", error);
-          messageObj.content = "[Encrypted message - decryption failed]";
         }
-      }
 
-      return messageObj;
-    });
+        return messageObj;
+      })
+    );
 
     return {
       messages: decryptedMessages.reverse(),
@@ -1315,22 +1440,36 @@ export class ChatService {
    */
   async removeMemberFromRoom(
     roomId: string,
-    ownerId: string,
+    requesterId: string,
     memberUserId: string
   ): Promise<{ message: string; roomId: string; removedUserId: string }> {
-    const room = await ChatRoom.findById(roomId).populate(
-      "members.user",
-      "name email"
-    );
+    const room = await ChatRoom.findById(roomId)
+      .populate("members.user", "name email")
+      .populate("workspace");
 
     if (!room) {
       throw new NotFoundError("Room not found");
     }
 
     // Check if requester is the room owner
-    const isOwner = room.createdBy && room.createdBy.toString() === ownerId;
-    if (!isOwner) {
-      throw new AuthorizationError("Only room owners can remove members");
+    const isRoomOwner =
+      room.createdBy && room.createdBy.toString() === requesterId;
+
+    // Check if requester is an admin
+    const requesterMember = room.members.find(
+      (m: any) => m.user && m.user._id.toString() === requesterId
+    );
+    const isAdmin = requesterMember?.role === "admin";
+
+    // Check if requester is workspace owner
+    const workspace = room.workspace as any;
+    const isWorkspaceOwner = workspace?.owner?.toString() === requesterId;
+
+    // Only room owners, admins, and workspace owners can remove members
+    if (!isRoomOwner && !isAdmin && !isWorkspaceOwner) {
+      throw new AuthorizationError(
+        "Only room owners, admins, and workspace owners can remove members"
+      );
     }
 
     // Check if member exists in room
@@ -1343,16 +1482,32 @@ export class ChatService {
     }
 
     // Cannot remove the room owner
-    if (memberUserId === ownerId) {
-      throw new ValidationError("Room owner cannot be removed from the room");
+    if (memberUserId === requesterId) {
+      throw new ValidationError("You cannot remove yourself from the room");
+    }
+
+    // Cannot remove the room owner (unless removing yourself)
+    if (
+      room.createdBy &&
+      room.createdBy.toString() === memberUserId &&
+      !isRoomOwner
+    ) {
+      throw new ValidationError(
+        "Room owner cannot be removed by other members"
+      );
     }
 
     const removedMember = room.members[memberIndex];
     room.members.splice(memberIndex, 1);
     await room.save();
 
+    const removerRole = isRoomOwner
+      ? "room owner"
+      : isWorkspaceOwner
+      ? "workspace owner"
+      : "admin";
     console.log(
-      `🚪 [CHAT-SERVICE] Member ${removedMember.user.name} removed from room ${room.name} by owner ${ownerId}`
+      `🚪 [CHAT-SERVICE] Member ${removedMember.user.name} removed from room ${room.name} by ${removerRole} ${requesterId}`
     );
 
     // Emit socket event to notify the removed user
@@ -1362,7 +1517,7 @@ export class ChatService {
       io.to(memberUserId).emit("member:removed", {
         roomId,
         roomName: room.name,
-        removedBy: ownerId,
+        removedBy: requesterId,
         message: `You have been removed from room "${room.name}"`,
       });
 
@@ -1371,7 +1526,7 @@ export class ChatService {
         roomId,
         userId: memberUserId,
         userName: removedMember.user.name,
-        removedBy: ownerId,
+        removedBy: requesterId,
       });
 
       console.log(

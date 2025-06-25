@@ -139,18 +139,27 @@ export class KeyManagementService {
     // Create a deterministic key for the pair (always same order)
     const pairKey = [userId, otherUserId].sort().join("-");
 
+    // Get the current highest key version for this user-room combination
+    const existingKey = await ChatRoomKey.findOne({
+      roomId: roomId,
+      user: userId,
+    }).sort({ keyVersion: -1 });
+
+    const nextVersion = existingKey ? existingKey.keyVersion + 1 : 1;
+
     // Store the shared secret for this user-pair-room combination
     await ChatRoomKey.findOneAndUpdate(
       {
         roomId: roomId,
         user: userId,
+        keyVersion: nextVersion,
       },
       {
         roomId: roomId,
         user: userId,
         encryptedRoomKey: pairKey, // Using this field to store the pair identifier
         sharedSecret: sharedSecret,
-        keyVersion: 1,
+        keyVersion: nextVersion,
       },
       { upsert: true, new: true }
     );
@@ -276,14 +285,68 @@ export class KeyManagementService {
   }
 
   /**
-   * Clean up old shared secrets for a room
+   * Get all key versions for a user in a room (for backward compatibility)
    */
-  static async cleanupRoomKeys(roomId: string): Promise<void> {
-    this.log(`🧹 [KEY-MGMT] Cleaning up old keys for room ${roomId}`);
+  static async getAllKeyVersions(
+    userId: string,
+    roomId: string
+  ): Promise<{ version: number; sharedSecret: string }[]> {
+    this.log(
+      `🔍 [KEY-MGMT] Getting all key versions for user ${userId} in room ${roomId}`
+    );
 
-    await ChatRoomKey.deleteMany({ roomId: roomId });
+    const keys = await ChatRoomKey.find({
+      roomId: roomId,
+      user: userId,
+    }).sort({ keyVersion: -1 }); // Sort by version descending (newest first)
 
-    this.log(`✅ [KEY-MGMT] Cleaned up keys for room ${roomId}`);
+    const keyVersions = keys.map((key) => ({
+      version: key.keyVersion,
+      sharedSecret: key.sharedSecret,
+    }));
+
+    this.log(
+      `📋 [KEY-MGMT] Found ${keyVersions.length} key versions for user ${userId} in room ${roomId}`
+    );
+
+    return keyVersions;
+  }
+
+  /**
+   * Clean up old shared secrets for a room (keep recent versions for backward compatibility)
+   */
+  static async cleanupRoomKeys(
+    roomId: string,
+    keepVersions: number = 3
+  ): Promise<void> {
+    this.log(
+      `🧹 [KEY-MGMT] Cleaning up old keys for room ${roomId}, keeping ${keepVersions} recent versions`
+    );
+
+    // Get all users in the room
+    const users = await ChatRoomKey.distinct("user", { roomId: roomId });
+
+    for (const userId of users) {
+      // Get all keys for this user-room combination, sorted by version descending
+      const userKeys = await ChatRoomKey.find({
+        roomId: roomId,
+        user: userId,
+      }).sort({ keyVersion: -1 });
+
+      // Keep only the most recent versions
+      if (userKeys.length > keepVersions) {
+        const keysToDelete = userKeys.slice(keepVersions);
+        const idsToDelete = keysToDelete.map((key) => key._id);
+
+        await ChatRoomKey.deleteMany({ _id: { $in: idsToDelete } });
+
+        this.log(
+          `🗑️ [KEY-MGMT] Deleted ${keysToDelete.length} old key versions for user ${userId} in room ${roomId}`
+        );
+      }
+    }
+
+    this.log(`✅ [KEY-MGMT] Cleaned up old keys for room ${roomId}`);
   }
 
   /**

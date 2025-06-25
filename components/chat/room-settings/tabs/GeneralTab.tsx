@@ -41,6 +41,15 @@ export default function GeneralTab({
 
   const canEdit = isOwner || isAdmin; // Owners and admins can edit general settings
 
+  // Debug logging for GeneralTab
+  console.log("🔍 [GENERAL-TAB] Permission Debug:", {
+    isOwner,
+    isAdmin,
+    canEdit,
+    isEditing,
+    shouldShowEditButton: canEdit && !isEditing,
+  });
+
   const handleSave = async () => {
     if (!onRoomUpdate) return;
 
@@ -79,14 +88,16 @@ export default function GeneralTab({
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Basic Information</span>
-            {canEdit && !isEditing && (
+            {/* Temporarily force show edit button for testing */}
+            {(canEdit || true) && !isEditing && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsEditing(true)}
+                className={!canEdit ? "opacity-50" : ""}
               >
                 <Edit3 className="h-4 w-4 mr-2" />
-                Edit
+                Edit {!canEdit && "(Debug)"}
               </Button>
             )}
           </CardTitle>
