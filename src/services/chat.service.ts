@@ -22,6 +22,9 @@ import type {
 } from "@/src/types/chat.types";
 import { User } from "@/src/models/user";
 import { EmailService } from "./email.service";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 export class ChatService {
   private fileUploadService: FileUploadService;
@@ -237,6 +240,305 @@ export class ChatService {
 
     // Delete the room
     await ChatRoom.findByIdAndDelete(roomId);
+  }
+
+  /**
+   * Archive room
+   */
+  async archiveRoom(roomId: string, userId: string): Promise<ChatRoomType> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (room.createdBy.toString() !== userId) {
+      throw new AuthorizationError("Only room creator can archive the room");
+    }
+
+    room.isArchived = true;
+    room.archivedAt = new Date();
+    await room.save();
+
+    await room.populate([
+      { path: "createdBy", select: "name email avatar" },
+      { path: "members.user", select: "name email avatar" },
+    ]);
+
+    return room.toObject();
+  }
+
+  /**
+   * Export room data
+   */
+  async exportRoomData(
+    roomId: string,
+    userId: string,
+    format: string = "excel"
+  ): Promise<any> {
+    const room = await ChatRoom.findById(roomId).populate([
+      { path: "createdBy", select: "name email avatar" },
+      { path: "members.user", select: "name email avatar" },
+    ]);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if user is a member of the room
+    const isMember = room.members.some(
+      (member: any) => member.user && member.user._id.toString() === userId
+    );
+
+    if (!isMember) {
+      throw new AuthorizationError("Access denied");
+    }
+
+    // Get all messages in the room
+    const messages = await ChatMessage.find({ room: roomId })
+      .populate("sender", "name email")
+      .sort({ createdAt: 1 });
+
+    const exportData = {
+      room: {
+        id: room._id,
+        name: room.name,
+        description: room.description,
+        type: room.type,
+        isEncrypted: room.isEncrypted,
+        createdAt: room.createdAt,
+        createdBy: room.createdBy,
+        members: room.members,
+      },
+      messages: messages.map((msg) => ({
+        id: msg._id,
+        content: msg.content,
+        sender: msg.sender,
+        createdAt: msg.createdAt,
+        type: msg.type,
+        isEncrypted: !!msg.encryptedContent,
+      })),
+      exportedAt: new Date(),
+    };
+
+    if (format === "excel") {
+      return this.generateExcelExport(exportData);
+    } else if (format === "pdf") {
+      return this.generatePDFExport(exportData);
+    } else {
+      return exportData;
+    }
+  }
+
+  /**
+   * Regenerate encryption keys
+   */
+  async regenerateEncryptionKeys(
+    roomId: string,
+    userId: string
+  ): Promise<ChatRoomType> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    if (room.createdBy.toString() !== userId) {
+      throw new AuthorizationError(
+        "Only room creator can regenerate encryption keys"
+      );
+    }
+
+    // Generate new encryption key ID
+    const crypto = require("crypto");
+    room.encryptionKeyId = crypto.randomBytes(16).toString("hex");
+    await room.save();
+
+    await room.populate([
+      { path: "createdBy", select: "name email avatar" },
+      { path: "members.user", select: "name email avatar" },
+    ]);
+
+    return room.toObject();
+  }
+
+  /**
+   * Generate Excel export
+   */
+  private generateExcelExport(exportData: any): Buffer {
+    const workbook = XLSX.utils.book_new();
+
+    // Room Info Sheet
+    const roomInfo = [
+      ["Room Name", exportData.room.name],
+      ["Description", exportData.room.description || "N/A"],
+      ["Type", exportData.room.type],
+      ["Encrypted", exportData.room.isEncrypted ? "Yes" : "No"],
+      ["Created At", new Date(exportData.room.createdAt).toLocaleString()],
+      ["Created By", exportData.room.createdBy?.name || "Unknown"],
+      ["Total Members", exportData.room.members?.length || 0],
+      ["Total Messages", exportData.messages.length],
+      ["Exported At", new Date(exportData.exportedAt).toLocaleString()],
+    ];
+
+    const roomSheet = XLSX.utils.aoa_to_sheet(roomInfo);
+    XLSX.utils.book_append_sheet(workbook, roomSheet, "Room Info");
+
+    // Messages Sheet
+    const messagesData = [
+      ["Date", "Time", "Sender", "Message", "Type", "Encrypted"],
+    ];
+
+    exportData.messages.forEach((msg: any) => {
+      const date = new Date(msg.createdAt);
+      messagesData.push([
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        msg.sender?.name || "Unknown",
+        msg.content || "[No content]",
+        msg.type || "text",
+        msg.isEncrypted ? "Yes" : "No",
+      ]);
+    });
+
+    const messagesSheet = XLSX.utils.aoa_to_sheet(messagesData);
+    XLSX.utils.book_append_sheet(workbook, messagesSheet, "Messages");
+
+    // Members Sheet
+    const membersData = [["Name", "Email", "Role", "Joined At"]];
+
+    exportData.room.members?.forEach((member: any) => {
+      membersData.push([
+        member.user?.name || "Unknown",
+        member.user?.email || "N/A",
+        member.role || "member",
+        new Date(member.joinedAt).toLocaleString(),
+      ]);
+    });
+
+    const membersSheet = XLSX.utils.aoa_to_sheet(membersData);
+    XLSX.utils.book_append_sheet(workbook, membersSheet, "Members");
+
+    return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  }
+
+  /**
+   * Generate PDF export
+   */
+  private generatePDFExport(exportData: any): Buffer {
+    const doc = new jsPDF();
+
+    // Title
+    doc.setFontSize(20);
+    doc.text(`Room Export: ${exportData.room.name}`, 20, 20);
+
+    // Room Information
+    doc.setFontSize(14);
+    doc.text("Room Information", 20, 40);
+    doc.setFontSize(10);
+
+    const roomInfo = [
+      ["Property", "Value"],
+      ["Name", exportData.room.name],
+      ["Description", exportData.room.description || "N/A"],
+      ["Type", exportData.room.type],
+      ["Encrypted", exportData.room.isEncrypted ? "Yes" : "No"],
+      ["Created At", new Date(exportData.room.createdAt).toLocaleString()],
+      ["Created By", exportData.room.createdBy?.name || "Unknown"],
+      ["Total Members", exportData.room.members?.length || 0],
+      ["Total Messages", exportData.messages.length],
+      ["Exported At", new Date(exportData.exportedAt).toLocaleString()],
+    ];
+
+    (doc as any).autoTable({
+      head: [roomInfo[0]],
+      body: roomInfo.slice(1),
+      startY: 50,
+      theme: "grid",
+      headStyles: { fillColor: [66, 139, 202] },
+    });
+
+    // Messages Table
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.text("Messages", 20, 20);
+
+    const messagesData = exportData.messages.map((msg: any) => {
+      const date = new Date(msg.createdAt);
+      return [
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        msg.sender?.name || "Unknown",
+        msg.content?.substring(0, 50) +
+          (msg.content?.length > 50 ? "..." : "") || "[No content]",
+        msg.type || "text",
+        msg.isEncrypted ? "Yes" : "No",
+      ];
+    });
+
+    (doc as any).autoTable({
+      head: [["Date", "Time", "Sender", "Message", "Type", "Encrypted"]],
+      body: messagesData,
+      startY: 30,
+      theme: "grid",
+      headStyles: { fillColor: [66, 139, 202] },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        3: { cellWidth: 60 }, // Message column wider
+      },
+    });
+
+    // Members Table
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.text("Members", 20, 20);
+
+    const membersData =
+      exportData.room.members?.map((member: any) => [
+        member.user?.name || "Unknown",
+        member.user?.email || "N/A",
+        member.role || "member",
+        new Date(member.joinedAt).toLocaleString(),
+      ]) || [];
+
+    (doc as any).autoTable({
+      head: [["Name", "Email", "Role", "Joined At"]],
+      body: membersData,
+      startY: 30,
+      theme: "grid",
+      headStyles: { fillColor: [66, 139, 202] },
+    });
+
+    return Buffer.from(doc.output("arraybuffer"));
+  }
+
+  /**
+   * Delete conversation for current user only
+   */
+  async deleteConversation(roomId: string, userId: string): Promise<void> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if user is a member
+    const isMember = room.members.some(
+      (member: any) => member.user && member.user._id.toString() === userId
+    );
+
+    if (!isMember) {
+      throw new AuthorizationError("Access denied");
+    }
+
+    // For regular members, we'll mark messages as hidden for this user
+    // This is a soft delete that only affects the user's view
+    await ChatMessage.updateMany(
+      { room: roomId },
+      { $addToSet: { hiddenFrom: userId } }
+    );
+
+    console.log(`🗑️ User ${userId} deleted conversation in room ${roomId}`);
   }
 
   /**

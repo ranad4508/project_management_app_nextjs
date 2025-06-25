@@ -14,9 +14,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ViewMembersDialog } from "./ViewMembersDialog";
-import { RoomSettingsDialog } from "./RoomSettingsDialog";
+import { RoomSettingsDialog } from "./room-settings";
 import { InviteToRoomDialog } from "./InviteToRoomDialog";
 import { EncryptionStatus } from "./EncryptionStatus";
+import {
+  updateRoom,
+  removeMemberFromRoom,
+  updateMemberRole,
+} from "@/src/lib/api/room-settings";
 import {
   Menu,
   Hash,
@@ -47,6 +52,19 @@ export function ChatHeader({ room }: ChatHeaderProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
 
+  // Check if current user can edit room settings
+  const isOwner =
+    room.createdBy?._id === currentUser?.id ||
+    String(room.createdBy?._id) === String(currentUser?.id);
+  const userMember = room.members?.find(
+    (m) =>
+      m.user &&
+      (m.user._id === currentUser?.id ||
+        String(m.user._id) === String(currentUser?.id))
+  );
+  const isAdmin = userMember?.role === "admin" || isOwner;
+  const canEditSettings = isAdmin;
+
   const getRoomIcon = () => {
     if (room.type === "general") {
       return <Hash className="h-5 w-5" />;
@@ -57,11 +75,6 @@ export function ChatHeader({ room }: ChatHeaderProps) {
       <Users className="h-5 w-5" />
     );
   };
-
-  const isAdmin =
-    room.members.find((m) => m.user && m.user._id === currentUser?.id)?.role ===
-    MemberRole.ADMIN;
-  const isOwner = room.createdBy && room.createdBy._id === currentUser?.id;
 
   return (
     <>
@@ -79,9 +92,22 @@ export function ChatHeader({ room }: ChatHeaderProps) {
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             {getRoomIcon()}
             <div className="min-w-0 flex-1">
-              <h1 className="text-sm sm:text-base lg:text-lg font-semibold truncate">
-                {room.name}
-              </h1>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-sm sm:text-base lg:text-lg font-semibold truncate">
+                  {room.name}
+                </h1>
+                {canEditSettings && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSettings(true)}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                    title="Edit room settings"
+                  >
+                    <Settings className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
               {room.description && (
                 <p className="text-xs sm:text-sm text-muted-foreground truncate hidden sm:block">
                   {room.description}
@@ -173,10 +199,13 @@ export function ChatHeader({ room }: ChatHeaderProps) {
       />
 
       <RoomSettingsDialog
-        open={showSettings}
-        onOpenChange={setShowSettings}
         room={room}
-        currentUserId={currentUser?.id || ""}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        currentUser={currentUser}
+        onRoomUpdate={updateRoom}
+        onMemberRemove={removeMemberFromRoom}
+        onMemberRoleChange={updateMemberRole}
       />
 
       <InviteToRoomDialog

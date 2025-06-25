@@ -113,6 +113,7 @@ export interface ChatRoom {
   isEncrypted: boolean;
   encryptionKeyId?: string;
   isArchived: boolean;
+  archivedAt?: Date;
   lastMessage?: ChatMessage;
   lastActivity: Date;
   settings: {

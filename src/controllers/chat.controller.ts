@@ -104,6 +104,110 @@ export class ChatController {
     }
   );
 
+  archiveRoom = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      const room = await this.chatService.archiveRoom(roomId, user.id);
+
+      return NextResponse.json({
+        success: true,
+        data: room,
+        message: "Room archived successfully",
+      });
+    }
+  );
+
+  exportRoomData = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      // Get format from query params
+      const url = new URL(req.url);
+      const format = url.searchParams.get("format") || "excel";
+
+      const data = await this.chatService.exportRoomData(
+        roomId,
+        user.id,
+        format
+      );
+
+      if (format === "excel") {
+        return new NextResponse(data, {
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": `attachment; filename="room-export-${roomId}.xlsx"`,
+          },
+        });
+      } else if (format === "pdf") {
+        return new NextResponse(data, {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="room-export-${roomId}.pdf"`,
+          },
+        });
+      } else {
+        // JSON format
+        return NextResponse.json({
+          success: true,
+          data,
+          message: "Room data exported successfully",
+        });
+      }
+    }
+  );
+
+  deleteConversation = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      await this.chatService.deleteConversation(roomId, user.id);
+
+      return NextResponse.json({
+        success: true,
+        message: "Conversation deleted from your view successfully",
+      });
+    }
+  );
+
+  regenerateEncryptionKeys = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      const room = await this.chatService.regenerateEncryptionKeys(
+        roomId,
+        user.id
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: room,
+        message: "Encryption keys regenerated successfully",
+      });
+    }
+  );
+
   deleteRoomMessages = asyncHandler(
     async (
       req: NextRequest,
