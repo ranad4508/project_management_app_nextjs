@@ -50,19 +50,26 @@ export class SocketService {
     // Authentication middleware
     this.io.use(async (socket, next) => {
       try {
-        const token = socket.handshake.auth.token;
-        if (!token) {
-          throw new Error("No token provided");
+        console.log("🔐 [SOCKET] Authenticating socket connection...");
+        console.log("🔐 [SOCKET] Auth data:", socket.handshake.auth);
+
+        const userId = socket.handshake.auth.userId;
+        if (!userId) {
+          console.error("❌ [SOCKET] No userId provided in auth");
+          throw new Error("No userId provided");
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-        const user = await User.findById(decoded.userId).select(
-          "name email avatar"
-        );
+        console.log(`🔍 [SOCKET] Looking up user: ${userId}`);
+        const user = await User.findById(userId).select("name email avatar");
 
         if (!user) {
+          console.error(`❌ [SOCKET] User not found: ${userId}`);
           throw new Error("User not found");
         }
+
+        console.log(
+          `✅ [SOCKET] User authenticated: ${user.name} (${user._id})`
+        );
 
         socket.data.userId = user._id.toString();
         socket.data.userName = user.name;
@@ -72,6 +79,7 @@ export class SocketService {
 
         next();
       } catch (error) {
+        console.error("❌ [SOCKET] Authentication failed:", error);
         next(new Error("Authentication failed"));
       }
     });
@@ -223,11 +231,23 @@ export class SocketService {
     };
 
     this.onlineUsers.set(socket.data.userId, onlineUser);
+    console.log(
+      `🟢 [SOCKET] User ${socket.data.userName} (${socket.data.userId}) is now online`
+    );
+    console.log(`👥 [SOCKET] Total online users: ${this.onlineUsers.size}`);
 
     // Notify rooms about user coming online
     userRooms.forEach((roomId) => {
       socket.to(roomId).emit("user:online", onlineUser);
+      console.log(`📡 [SOCKET] Broadcasted online status to room: ${roomId}`);
     });
+
+    // Send current online users list to the newly connected user
+    const allOnlineUsers = Array.from(this.onlineUsers.values());
+    socket.emit("users:online", allOnlineUsers);
+    console.log(
+      `📋 [SOCKET] Sent ${allOnlineUsers.length} online users to ${socket.data.userName}`
+    );
   }
 
   private async joinUserRooms(socket: any) {
@@ -412,10 +432,15 @@ export class SocketService {
   }
 
   private handleDisconnect(socket: any) {
-    console.log(`User ${socket.data.userName} disconnected`);
+    console.log(
+      `🔴 [SOCKET] User ${socket.data.userName} (${socket.data.userId}) disconnected`
+    );
 
     // Remove from online users
     this.onlineUsers.delete(socket.data.userId);
+    console.log(
+      `👥 [SOCKET] Total online users after disconnect: ${this.onlineUsers.size}`
+    );
 
     // Remove from all typing indicators
     socket.data.rooms.forEach((roomId: any) => {
@@ -425,6 +450,7 @@ export class SocketService {
     // Notify rooms about user going offline
     socket.data.rooms.forEach((roomId: any) => {
       socket.to(roomId).emit("user:offline", socket.data.userId);
+      console.log(`📡 [SOCKET] Broadcasted offline status to room: ${roomId}`);
     });
   }
 

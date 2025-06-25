@@ -271,6 +271,14 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
           dispatch(removeOnlineUser(userId));
         });
 
+        // Bulk online users update
+        socket.on("users:online", (users: OnlineUser[]) => {
+          socketLog("👥 Received online users list:", users.length);
+          users.forEach((user) => {
+            dispatch(addOnlineUser(user));
+          });
+        });
+
         // Error handling
         socket.on("error", (error: any) => {
           socketLog("❌ Socket error:", error);

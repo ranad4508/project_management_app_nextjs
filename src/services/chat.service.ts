@@ -172,7 +172,11 @@ export class ChatService {
       throw new NotFoundError("Room not found");
     }
 
-    if (!room.isMember(userId)) {
+    // Check if user is a member of the room
+    const isMember = room.members.some(
+      (member: any) => member.user && member.user.toString() === userId
+    );
+    if (!isMember) {
       throw new AuthorizationError("Access denied to this room");
     }
 
@@ -237,11 +241,18 @@ export class ChatService {
 
   /**
    * Delete all messages in a room (conversation)
+   * - Room owners/admins: Delete messages for everyone
+   * - Regular members: Hide messages from their view only
    */
   async deleteRoomMessages(
     roomId: string,
     userId: string
-  ): Promise<{ deletedCount: number; roomId: string; roomName: string }> {
+  ): Promise<{
+    deletedCount: number;
+    roomId: string;
+    roomName: string;
+    type: "deleted" | "hidden";
+  }> {
     const room = await ChatRoom.findById(roomId);
 
     if (!room) {
@@ -257,32 +268,63 @@ export class ChatService {
       throw new AuthorizationError("You are not a member of this room");
     }
 
-    // Check if user has permission to delete messages
-    // Only admins, owners, or room creator can delete all messages
+    // Check user permissions
     const isOwner = room.createdBy && room.createdBy.toString() === userId;
     const isAdmin = member.role === MemberRole.ADMIN;
 
-    if (!isOwner && !isAdmin) {
-      throw new AuthorizationError(
-        "You don't have permission to delete all messages in this room"
+    // Count messages before deletion/hiding
+    const messageCount = await ChatMessage.countDocuments({
+      room: roomId,
+      deletedAt: { $exists: false },
+      hiddenFrom: { $ne: userId },
+    });
+
+    if (isOwner || isAdmin) {
+      // Room owners and admins can delete messages for everyone
+      console.log(
+        `🗑️ [CHAT-SERVICE] Admin/Owner ${userId} deleting ${messageCount} messages for everyone in room ${room.name}`
       );
+
+      const result = await ChatMessage.deleteMany({ room: roomId });
+
+      console.log(
+        `✅ [CHAT-SERVICE] Deleted ${result.deletedCount} messages from room ${room.name}`
+      );
+
+      return {
+        deletedCount: result.deletedCount,
+        roomId,
+        roomName: room.name,
+        type: "deleted",
+      };
+    } else {
+      // Regular members can only hide messages from their view
+      console.log(
+        `👁️ [CHAT-SERVICE] Member ${userId} hiding ${messageCount} messages from their view in room ${room.name}`
+      );
+
+      const result = await ChatMessage.updateMany(
+        {
+          room: roomId,
+          deletedAt: { $exists: false },
+          hiddenFrom: { $ne: userId },
+        },
+        {
+          $addToSet: { hiddenFrom: userId },
+        }
+      );
+
+      console.log(
+        `✅ [CHAT-SERVICE] Hidden ${result.modifiedCount} messages for user ${userId} in room ${room.name}`
+      );
+
+      return {
+        deletedCount: result.modifiedCount,
+        roomId,
+        roomName: room.name,
+        type: "hidden",
+      };
     }
-
-    // Count messages before deletion
-    const messageCount = await ChatMessage.countDocuments({ room: roomId });
-
-    // Delete all messages in the room
-    const result = await ChatMessage.deleteMany({ room: roomId });
-
-    console.log(
-      `🗑️ User ${userId} deleted ${messageCount} messages from room ${room.name}`
-    );
-
-    return {
-      deletedCount: result.deletedCount,
-      roomId,
-      roomName: room.name,
-    };
   }
 
   /**
@@ -307,7 +349,11 @@ export class ChatService {
       throw new NotFoundError("Room not found");
     }
 
-    if (!room.isMember(userId)) {
+    // Check if user is a member of the room
+    const isMember = room.members.some(
+      (member: any) => member.user && member.user.toString() === userId
+    );
+    if (!isMember) {
       throw new AuthorizationError("Access denied to this room");
     }
 
@@ -469,7 +515,11 @@ export class ChatService {
       throw new NotFoundError("Room not found");
     }
 
-    if (!room.isMember(userId)) {
+    // Check if user is a member of the room
+    const isMember = room.members.some(
+      (member: any) => member.user && member.user.toString() === userId
+    );
+    if (!isMember) {
       throw new AuthorizationError("Access denied to this room");
     }
 
@@ -479,6 +529,7 @@ export class ChatService {
       ChatMessage.find({
         room: roomId,
         deletedAt: { $exists: false },
+        hiddenFrom: { $ne: userId }, // Exclude messages hidden from this user
       })
         .populate("sender", "name email avatar")
         .populate("reactions.user", "name email avatar")
@@ -492,6 +543,7 @@ export class ChatService {
       ChatMessage.countDocuments({
         room: roomId,
         deletedAt: { $exists: false },
+        hiddenFrom: { $ne: userId }, // Exclude messages hidden from this user
       }),
     ]);
 
@@ -505,6 +557,12 @@ export class ChatService {
         room.encryptionKeyId
       ) {
         try {
+          // Debug: Log the structure of encryptedContent
+          console.log(
+            `🔍 [CHAT-SERVICE] Debug - Message ${messageObj._id} encryptedContent structure:`,
+            JSON.stringify(messageObj.encryptedContent, null, 2)
+          );
+
           // Try new consistent shared secret first
           const consistentSharedSecret = crypto
             .createHash("sha256")
@@ -516,6 +574,10 @@ export class ChatService {
           );
 
           try {
+            console.log(
+              `🔍 [CHAT-SERVICE] Attempting decryption with consistent shared secret for message ${messageObj._id}`
+            );
+
             const decryptedContent = EncryptionService.decryptMessage(
               messageObj.encryptedContent,
               consistentSharedSecret,
@@ -529,33 +591,84 @@ export class ChatService {
               `🔓 Message decrypted - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
             );
           } catch (newKeyError) {
-            // If new key fails, try the old temporary shared secret for backward compatibility
-            console.log(
-              `🔄 [CHAT-SERVICE] New key failed, trying old temporary key for message ${messageObj._id}`
-            );
+            // Try multiple fallback shared secret patterns for backward compatibility
+            const fallbackSecrets = [
+              // Original demo patterns
+              "demo-shared-secret-" + room.encryptionKeyId,
+              "demo-shared-secret",
 
-            const oldTempSharedSecret =
-              "demo-shared-secret-" + room.encryptionKeyId;
+              // Direct key patterns
+              room.encryptionKeyId,
+              `${room.encryptionKeyId}-demo`,
 
-            try {
-              const decryptedContent = EncryptionService.decryptMessage(
-                messageObj.encryptedContent,
-                oldTempSharedSecret,
-                userId,
-                roomId,
-                messageObj._id
-              );
-              messageObj.content = decryptedContent;
+              // Room-based patterns
+              `room-${roomId}-key`,
+              `${roomId}-shared-secret`,
 
-              console.log(
-                `🔓 Message decrypted with old key - Room: ${room.name} (${roomId}), Message ID: ${messageObj._id}, From: ${messageObj.sender.name}`
-              );
-            } catch (oldKeyError) {
+              // Legacy patterns that might have been used
+              `${roomId}-${room.encryptionKeyId}`,
+              `${room.encryptionKeyId}-${roomId}`,
+
+              // Simple concatenations
+              roomId + room.encryptionKeyId,
+              room.encryptionKeyId + roomId,
+
+              // Hashed versions of simple patterns
+              crypto
+                .createHash("sha256")
+                .update(room.encryptionKeyId)
+                .digest("hex"),
+              crypto.createHash("sha256").update(roomId).digest("hex"),
+              crypto
+                .createHash("sha256")
+                .update(`${roomId}-${room.encryptionKeyId}`)
+                .digest("hex"),
+
+              // Default patterns
+              "default-shared-secret",
+              "shared-secret",
+              "encryption-key",
+            ];
+
+            let decrypted = false;
+
+            for (const fallbackSecret of fallbackSecrets) {
+              try {
+                console.log(
+                  `🔄 [CHAT-SERVICE] Trying fallback secret pattern for message ${
+                    messageObj._id
+                  }: ${fallbackSecret.substring(0, 10)}...`
+                );
+
+                const decryptedContent = EncryptionService.decryptMessage(
+                  messageObj.encryptedContent,
+                  fallbackSecret,
+                  userId,
+                  roomId,
+                  messageObj._id
+                );
+                messageObj.content = decryptedContent;
+                decrypted = true;
+
+                console.log(
+                  `🔓 Message decrypted with fallback key - Room: ${
+                    room.name
+                  } (${roomId}), Message ID: ${
+                    messageObj._id
+                  }, Pattern: ${fallbackSecret.substring(0, 10)}...`
+                );
+                break;
+              } catch (fallbackError) {
+                // Continue to next pattern
+                continue;
+              }
+            }
+
+            if (!decrypted) {
               console.error(
-                "❌ Failed to decrypt message with both new and old keys:",
-                oldKeyError
+                `❌ Failed to decrypt message ${messageObj._id} with all known patterns`
               );
-              messageObj.content = "[Encrypted message - decryption failed]";
+              messageObj.content = "[Encrypted message - unable to decrypt]";
             }
           }
         } catch (error) {
@@ -654,7 +767,11 @@ export class ChatService {
       throw new AuthorizationError("Admin access required to invite users");
     }
 
-    if (room.isMember(invitedUserId)) {
+    // Check if user is already a member of the room
+    const isAlreadyMember = room.members.some(
+      (member: any) => member.user && member.user.toString() === invitedUserId
+    );
+    if (isAlreadyMember) {
       throw new ConflictError("User is already a member of this room");
     }
 
@@ -889,5 +1006,217 @@ export class ChatService {
 
     room.members[memberIndex].lastReadAt = new Date();
     await room.save();
+  }
+
+  /**
+   * Remove member from room
+   */
+  async removeMemberFromRoom(
+    roomId: string,
+    ownerId: string,
+    memberUserId: string
+  ): Promise<{ message: string; roomId: string; removedUserId: string }> {
+    const room = await ChatRoom.findById(roomId).populate(
+      "members.user",
+      "name email"
+    );
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if requester is the room owner
+    const isOwner = room.createdBy && room.createdBy.toString() === ownerId;
+    if (!isOwner) {
+      throw new AuthorizationError("Only room owners can remove members");
+    }
+
+    // Check if member exists in room
+    const memberIndex = room.members.findIndex(
+      (m: any) => m.user && m.user._id.toString() === memberUserId
+    );
+
+    if (memberIndex === -1) {
+      throw new NotFoundError("Member not found in this room");
+    }
+
+    // Cannot remove the room owner
+    if (memberUserId === ownerId) {
+      throw new ValidationError("Room owner cannot be removed from the room");
+    }
+
+    const removedMember = room.members[memberIndex];
+    room.members.splice(memberIndex, 1);
+    await room.save();
+
+    console.log(
+      `🚪 [CHAT-SERVICE] Member ${removedMember.user.name} removed from room ${room.name} by owner ${ownerId}`
+    );
+
+    return {
+      message: `Member ${removedMember.user.name} removed successfully`,
+      roomId,
+      removedUserId: memberUserId,
+    };
+  }
+
+  /**
+   * Change member role in room
+   */
+  async changeMemberRole(
+    roomId: string,
+    ownerId: string,
+    memberUserId: string,
+    newRole: MemberRole
+  ): Promise<{ message: string; roomId: string; updatedMember: any }> {
+    const room = await ChatRoom.findById(roomId).populate(
+      "members.user",
+      "name email"
+    );
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if requester is the room owner
+    const isOwner = room.createdBy && room.createdBy.toString() === ownerId;
+    if (!isOwner) {
+      throw new AuthorizationError("Only room owners can change member roles");
+    }
+
+    // Find the member
+    const member = room.members.find(
+      (m: any) => m.user && m.user._id.toString() === memberUserId
+    );
+
+    if (!member) {
+      throw new NotFoundError("Member not found in this room");
+    }
+
+    // Cannot change owner's role
+    if (memberUserId === ownerId) {
+      throw new ValidationError("Cannot change room owner's role");
+    }
+
+    // Validate role
+    if (!Object.values(MemberRole).includes(newRole)) {
+      throw new ValidationError("Invalid role specified");
+    }
+
+    const oldRole = member.role;
+    member.role = newRole;
+    await room.save();
+
+    console.log(
+      `👑 [CHAT-SERVICE] Member ${member.user.name} role changed from ${oldRole} to ${newRole} in room ${room.name}`
+    );
+
+    return {
+      message: `Member role updated from ${oldRole} to ${newRole}`,
+      roomId,
+      updatedMember: {
+        userId: memberUserId,
+        name: member.user.name,
+        email: member.user.email,
+        oldRole,
+        newRole,
+      },
+    };
+  }
+
+  /**
+   * Invite member to room by email
+   */
+  async inviteMemberByEmail(
+    roomId: string,
+    ownerId: string,
+    email: string
+  ): Promise<{ message: string; roomId: string; invitedEmail: string }> {
+    const room = await ChatRoom.findById(roomId);
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if requester is the room owner
+    const isOwner = room.createdBy && room.createdBy.toString() === ownerId;
+    if (!isOwner) {
+      throw new AuthorizationError("Only room owners can invite members");
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      throw new NotFoundError(`User with email ${email} not found`);
+    }
+
+    // Check if user is already a member
+    const isMember = room.members.some(
+      (m: any) => m.user && m.user.toString() === user._id.toString()
+    );
+
+    if (isMember) {
+      throw new ValidationError("User is already a member of this room");
+    }
+
+    // Use existing invitation method
+    await this.inviteToRoomWithEmail(roomId, ownerId, user._id.toString());
+
+    console.log(
+      `📧 [CHAT-SERVICE] Invitation sent to ${email} for room ${room.name} by owner ${ownerId}`
+    );
+
+    return {
+      message: `Invitation sent to ${email} successfully`,
+      roomId,
+      invitedEmail: email,
+    };
+  }
+
+  /**
+   * Get room members with detailed information
+   */
+  async getRoomMembers(
+    roomId: string,
+    userId: string
+  ): Promise<{ members: any[]; roomInfo: any }> {
+    const room = await ChatRoom.findById(roomId)
+      .populate("members.user", "name email avatar")
+      .populate("createdBy", "name email avatar");
+
+    if (!room) {
+      throw new NotFoundError("Room not found");
+    }
+
+    // Check if user is a member of the room
+    const isMember = room.members.some(
+      (m: any) => m.user && m.user._id.toString() === userId
+    );
+
+    if (!isMember) {
+      throw new AuthorizationError("You are not a member of this room");
+    }
+
+    const members = room.members.map((member: any) => ({
+      _id: member.user._id,
+      name: member.user.name,
+      email: member.user.email,
+      avatar: member.user.avatar,
+      role: member.role,
+      joinedAt: member.joinedAt,
+      isOwner: member.user._id.toString() === room.createdBy._id.toString(),
+    }));
+
+    return {
+      members,
+      roomInfo: {
+        _id: room._id,
+        name: room.name,
+        type: room.type,
+        memberCount: room.members.length,
+        createdBy: room.createdBy,
+        isOwner: room.createdBy._id.toString() === userId,
+      },
+    };
   }
 }

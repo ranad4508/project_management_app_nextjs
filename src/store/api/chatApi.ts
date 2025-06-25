@@ -132,25 +132,8 @@ export const chatApi = createApi({
         }
         throw new Error(response.message || "Failed to fetch messages");
       },
-      // Merge pages for infinite scroll
-      serializeQueryArgs: ({ queryArgs }) => {
-        const { roomId } = queryArgs;
-        return roomId;
-      },
-      merge: (currentCache, newItems, { arg }) => {
-        if (arg.page === 1) {
-          // First page or refresh
-          return newItems;
-        }
-        // Append older messages to the beginning
-        return {
-          ...newItems,
-          messages: [...newItems.messages, ...currentCache.messages],
-        };
-      },
-      forceRefetch({ currentArg, previousArg }) {
-        return currentArg?.page !== previousArg?.page;
-      },
+      // Don't use merge for pagination - let the component handle it
+      keepUnusedDataFor: 0, // Don't cache old pages
     }),
 
     sendMessage: builder.mutation<ChatMessage, SendMessageData>({
@@ -279,6 +262,91 @@ export const chatApi = createApi({
       },
     }),
 
+    // Member management
+    getRoomMembers: builder.query<{ members: any[]; roomInfo: any }, string>({
+      query: (roomId) => `rooms/${roomId}/members`,
+      transformResponse: (
+        response: ApiResponse<{ members: any[]; roomInfo: any }>
+      ) => {
+        if (response.success) {
+          return response.data!;
+        }
+        throw new Error(response.message || "Failed to get room members");
+      },
+      providesTags: ["RoomMembers"],
+    }),
+
+    inviteMemberByEmail: builder.mutation<
+      { message: string; roomId: string; invitedEmail: string },
+      { roomId: string; email: string }
+    >({
+      query: ({ roomId, email }) => ({
+        url: `rooms/${roomId}/members`,
+        method: "POST",
+        body: { email },
+      }),
+      transformResponse: (
+        response: ApiResponse<{
+          message: string;
+          roomId: string;
+          invitedEmail: string;
+        }>
+      ) => {
+        if (response.success) {
+          return response.data!;
+        }
+        throw new Error(response.message || "Failed to invite member");
+      },
+      invalidatesTags: ["RoomMembers", "ChatRoom"],
+    }),
+
+    removeMemberFromRoom: builder.mutation<
+      { message: string; roomId: string; removedUserId: string },
+      { roomId: string; memberId: string }
+    >({
+      query: ({ roomId, memberId }) => ({
+        url: `rooms/${roomId}/members/${memberId}`,
+        method: "DELETE",
+      }),
+      transformResponse: (
+        response: ApiResponse<{
+          message: string;
+          roomId: string;
+          removedUserId: string;
+        }>
+      ) => {
+        if (response.success) {
+          return response.data!;
+        }
+        throw new Error(response.message || "Failed to remove member");
+      },
+      invalidatesTags: ["RoomMembers", "ChatRoom"],
+    }),
+
+    changeMemberRole: builder.mutation<
+      { message: string; roomId: string; updatedMember: any },
+      { roomId: string; memberId: string; role: string }
+    >({
+      query: ({ roomId, memberId, role }) => ({
+        url: `rooms/${roomId}/members/${memberId}`,
+        method: "PUT",
+        body: { role },
+      }),
+      transformResponse: (
+        response: ApiResponse<{
+          message: string;
+          roomId: string;
+          updatedMember: any;
+        }>
+      ) => {
+        if (response.success) {
+          return response.data!;
+        }
+        throw new Error(response.message || "Failed to change member role");
+      },
+      invalidatesTags: ["RoomMembers", "ChatRoom"],
+    }),
+
     // Utility
     updateLastRead: builder.mutation<{ message: string }, string>({
       query: (roomId) => ({
@@ -307,5 +375,9 @@ export const {
   useRemoveReactionMutation,
   useInviteToRoomMutation,
   useAcceptRoomInvitationMutation,
+  useGetRoomMembersQuery,
+  useInviteMemberByEmailMutation,
+  useRemoveMemberFromRoomMutation,
+  useChangeMemberRoleMutation,
   useUpdateLastReadMutation,
 } = chatApi;

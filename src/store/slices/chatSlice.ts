@@ -96,6 +96,18 @@ const chatSlice = createSlice({
       state.messages[roomId] = messages;
     },
 
+    appendMessages: (
+      state,
+      action: PayloadAction<{ roomId: string; messages: ChatMessage[] }>
+    ) => {
+      const { roomId, messages } = action.payload;
+      if (!state.messages[roomId]) {
+        state.messages[roomId] = [];
+      }
+      // Prepend older messages to the beginning of the array
+      state.messages[roomId] = [...messages, ...state.messages[roomId]];
+    },
+
     addMessage: (state, action: PayloadAction<ChatMessage>) => {
       const message = action.payload;
       const roomId = message.room.toString();
@@ -285,7 +297,7 @@ const chatSlice = createSlice({
     },
 
     // Clear state
-    clearChatState: (state) => {
+    clearChatState: () => {
       return initialState;
     },
   },
@@ -299,6 +311,7 @@ export const {
   updateRoom,
   removeRoom,
   setMessages,
+  appendMessages,
   addMessage,
   updateMessage,
   removeMessage,
@@ -326,8 +339,13 @@ export const selectActiveRoom = (state: { chat: ChatState }) =>
   state.chat.rooms.find((room) => room._id === state.chat.activeRoomId);
 
 export const selectRoomMessages =
-  (roomId: string) => (state: { chat: ChatState }) =>
-    state.chat.messages[roomId] || [];
+  (roomId: string) => (state: { chat: ChatState }) => {
+    const messages = state.chat.messages[roomId] || [];
+    console.log(
+      `📋 [SELECTOR] Room ${roomId} has ${messages.length} messages in store`
+    );
+    return messages;
+  };
 
 export const selectTypingUsersInRoom =
   (roomId: string) => (state: { chat: ChatState }) =>

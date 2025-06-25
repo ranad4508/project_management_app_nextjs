@@ -27,6 +27,7 @@ export interface IChatMessage extends Document {
   replyTo?: mongoose.Types.ObjectId;
   editedAt?: Date;
   deletedAt?: Date;
+  hiddenFrom?: mongoose.Types.ObjectId[]; // Users who have hidden this message from their view
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +92,12 @@ const ChatMessageSchema = new Schema<IChatMessage>(
     },
     editedAt: Date,
     deletedAt: Date,
+    hiddenFrom: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true }
 );

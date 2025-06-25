@@ -1,13 +1,15 @@
 import crypto from "crypto";
 import type { EncryptionKeys, EncryptedMessage } from "@/src/types/chat.types";
-import { UserKeyPair, ChatRoomKey } from "@/src/models/encryption";
 
 export class EncryptionService {
   private static readonly ALGORITHM = "aes-256-gcm";
   private static readonly KEY_LENGTH = 32;
   private static readonly IV_LENGTH = 16;
-  private static debug: boolean = true;
+  private static debug: boolean = true; // Set to false in production
 
+  /**
+   * Enable or disable debug logging
+   */
   static setDebug(enabled: boolean): void {
     this.debug = enabled;
     this.log(
@@ -15,14 +17,20 @@ export class EncryptionService {
     );
   }
 
+  /**
+   * Internal logging function
+   */
   private static log(...args: any[]): void {
     if (this.debug) {
       console.log(...args);
     }
   }
 
+  // Store DH parameters to ensure consistency
+  private static dhParams: { prime: Buffer; generator: Buffer } | null = null;
+
   /**
-   * Generate Diffie-Hellman key pair with consistent parameters
+   * Generate Diffie-Hellman key pair
    */
   static generateDHKeyPair(): EncryptionKeys & {
     dhParams: { prime: string; generator: string };
@@ -31,13 +39,18 @@ export class EncryptionService {
     const dh = crypto.createDiffieHellman(2048);
     dh.generateKeys();
 
+    // Store DH parameters for later use
+    this.dhParams = {
+      prime: dh.getPrime(),
+      generator: dh.getGenerator(),
+    };
+
     const endTime = performance.now();
 
     const publicKey = dh.getPublicKey("hex");
     const privateKey = dh.getPrivateKey("hex");
-    const prime = dh.getPrime("hex");
-    const generator = dh.getGenerator("hex");
 
+    // Log key generation for real-time chat
     console.log("🔑 [CHAT-ENCRYPTION] Key Generation Started");
     console.log(
       `   ⏱️  Generation Time: ${(endTime - startTime).toFixed(2)}ms`
@@ -51,92 +64,10 @@ export class EncryptionService {
       publicKey,
       privateKey,
       dhParams: {
-        prime,
-        generator,
+        prime: this.dhParams.prime.toString("hex"),
+        generator: this.dhParams.generator.toString("hex"),
       },
     };
-  }
-
-  /**
-   * Store user's key pair in database
-   */
-  static async storeUserKeyPair(
-    userId: string,
-    keyPair: EncryptionKeys & {
-      dhParams: { prime: string; generator: string };
-    },
-    userPassword: string
-  ): Promise<void> {
-    const salt = crypto.randomBytes(32).toString("hex");
-    const iv = crypto.randomBytes(16).toString("hex");
-
-    // Encrypt private key with user's password
-    const key = crypto.pbkdf2Sync(userPassword, salt, 100000, 32, "sha256");
-    const cipher = crypto.createCipheriv(
-      "aes-256-cbc",
-      key,
-      Buffer.from(iv, "hex")
-    );
-    let encryptedPrivateKey = cipher.update(keyPair.privateKey, "utf8", "hex");
-    encryptedPrivateKey += cipher.final("hex");
-
-    await UserKeyPair.findOneAndUpdate(
-      { user: userId },
-      {
-        publicKey: keyPair.publicKey,
-        privateKeyEncrypted: encryptedPrivateKey,
-        salt,
-        iv,
-        dhParams: keyPair.dhParams,
-        keyVersion: 1,
-      },
-      { upsert: true, new: true }
-    );
-
-    console.log(`🔐 Stored encrypted key pair for user: ${userId}`);
-  }
-
-  /**
-   * Retrieve and decrypt user's private key
-   */
-  static async getUserPrivateKey(
-    userId: string,
-    userPassword: string
-  ): Promise<{
-    privateKey: string;
-    dhParams: { prime: string; generator: string };
-  } | null> {
-    const userKeyPair = await UserKeyPair.findOne({ user: userId });
-    if (!userKeyPair) return null;
-
-    try {
-      const key = crypto.pbkdf2Sync(
-        userPassword,
-        userKeyPair.salt,
-        100000,
-        32,
-        "sha256"
-      );
-      const decipher = crypto.createDecipheriv(
-        "aes-256-cbc",
-        key,
-        Buffer.from(userKeyPair.iv, "hex")
-      );
-      let privateKey = decipher.update(
-        userKeyPair.privateKeyEncrypted,
-        "hex",
-        "utf8"
-      );
-      privateKey += decipher.final("utf8");
-
-      return {
-        privateKey,
-        dhParams: userKeyPair.dhParams,
-      };
-    } catch (error) {
-      console.error("❌ Failed to decrypt private key:", error);
-      return null;
-    }
   }
 
   /**
@@ -145,16 +76,34 @@ export class EncryptionService {
   static computeSharedSecret(
     privateKey: string,
     otherPublicKey: string,
-    dhParams: { prime: string; generator: string }
+    dhParams?: { prime: string; generator: string }
   ): string {
     const startTime = performance.now();
 
-    const dh = crypto.createDiffieHellman(
-      Buffer.from(dhParams.prime, "hex"),
-      Buffer.from(dhParams.generator, "hex")
-    );
+    let dh: crypto.DiffieHellman;
+
+    if (dhParams) {
+      // Use provided DH parameters
+      dh = crypto.createDiffieHellman(
+        Buffer.from(dhParams.prime, "hex"),
+        Buffer.from(dhParams.generator, "hex")
+      );
+    } else if (this.dhParams) {
+      // Use stored DH parameters
+      dh = crypto.createDiffieHellman(
+        this.dhParams.prime,
+        this.dhParams.generator
+      );
+    } else {
+      // Fallback to generating new parameters (not recommended for production)
+      console.log(
+        "⚠️ [CHAT-ENCRYPTION] Warning: No DH parameters available, generating new ones"
+      );
+      dh = crypto.createDiffieHellman(2048);
+    }
 
     dh.setPrivateKey(Buffer.from(privateKey, "hex"));
+
     const sharedSecret = dh.computeSecret(Buffer.from(otherPublicKey, "hex"));
     const endTime = performance.now();
 
@@ -164,6 +113,7 @@ export class EncryptionService {
       .digest("hex")
       .substring(0, this.KEY_LENGTH * 2);
 
+    // Log key exchange for real-time chat
     console.log("🔄 [CHAT-ENCRYPTION] Key Exchange Started");
     console.log(
       `   📥 Other Public Key: ${otherPublicKey.substring(0, 32)}...`
@@ -177,129 +127,20 @@ export class EncryptionService {
   }
 
   /**
-   * Store shared secret for room
-   */
-  static async storeRoomSharedSecret(
-    roomId: string,
-    userId: string,
-    sharedSecret: string,
-    dhParams: { prime: string; generator: string }
-  ): Promise<void> {
-    // Encrypt the shared secret before storing
-    const encryptionKey = crypto.randomBytes(32);
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(this.ALGORITHM, encryptionKey, iv);
-
-    let encryptedSecret = cipher.update(sharedSecret, "utf8", "hex");
-    encryptedSecret += cipher.final("hex");
-    const authTag = cipher.getAuthTag();
-
-    const encryptedRoomKey = `${encryptedSecret}:${authTag.toString(
-      "hex"
-    )}:${iv.toString("hex")}:${encryptionKey.toString("hex")}`;
-
-    await ChatRoomKey.findOneAndUpdate(
-      { roomId, user: userId },
-      {
-        encryptedRoomKey,
-        sharedSecret,
-        dhParams,
-        keyVersion: 1,
-      },
-      { upsert: true, new: true }
-    );
-
-    console.log(`🔐 Stored shared secret for room ${roomId}, user ${userId}`);
-  }
-
-  /**
-   * Get shared secret for room
-   */
-  static async getRoomSharedSecret(
-    roomId: string,
-    userId: string
-  ): Promise<string | null> {
-    const roomKey = await ChatRoomKey.findOne({ roomId, user: userId });
-    return roomKey?.sharedSecret || null;
-  }
-
-  /**
-   * Generate room keys for all members using real DH key exchange
-   */
-  static async generateRoomKeys(
-    roomId: string,
-    memberIds: string[],
-    userPassword: string
-  ): Promise<void> {
-    console.log(`🔑 Generating room keys for ${memberIds.length} members`);
-
-    // Get all member public keys
-    const memberKeys = await UserKeyPair.find({
-      user: { $in: memberIds },
-    });
-
-    if (memberKeys.length !== memberIds.length) {
-      throw new Error("Some members don't have key pairs generated");
-    }
-
-    // For each pair of members, compute shared secrets
-    for (let i = 0; i < memberKeys.length; i++) {
-      const userA = memberKeys[i];
-
-      // Get user A's private key
-      const userAPrivateKey = await this.getUserPrivateKey(
-        userA.user.toString(),
-        userPassword
-      );
-
-      if (!userAPrivateKey) {
-        console.error(
-          `❌ Could not decrypt private key for user ${userA.user}`
-        );
-        continue;
-      }
-
-      for (let j = i + 1; j < memberKeys.length; j++) {
-        const userB = memberKeys[j];
-
-        // Compute shared secret between user A and user B
-        const sharedSecret = this.computeSharedSecret(
-          userAPrivateKey.privateKey,
-          userB.publicKey,
-          userAPrivateKey.dhParams
-        );
-
-        // Store shared secret for both users
-        await this.storeRoomSharedSecret(
-          roomId,
-          userA.user.toString(),
-          sharedSecret,
-          userAPrivateKey.dhParams
-        );
-
-        await this.storeRoomSharedSecret(
-          roomId,
-          userB.user.toString(),
-          sharedSecret,
-          userAPrivateKey.dhParams
-        );
-
-        console.log(
-          `✅ Generated shared secret between users ${userA.user} and ${userB.user}`
-        );
-      }
-    }
-  }
-
-  /**
-   * Generate AES key from shared secret
+   * Generate AES key from shared secret using simple hashing
    */
   static deriveAESKey(sharedSecret: string): Buffer {
+    const startTime = performance.now();
+
+    // Simple hash-based key derivation - consistent and reliable
+    // The sharedSecret is already a hex string from ChatService, so we need to convert it properly
     const key = crypto
       .createHash("sha256")
       .update(Buffer.from(sharedSecret, "hex"))
       .digest()
       .subarray(0, this.KEY_LENGTH);
+
+    const endTime = performance.now();
 
     return key;
   }
@@ -317,6 +158,7 @@ export class EncryptionService {
   ): EncryptedMessage {
     const startTime = performance.now();
 
+    // Log encryption for real-time chat messages
     console.log("🔒 [REAL-TIME-CHAT] Message Encryption Started");
     console.log(`   👤 User ID: ${userId || "Not provided"}`);
     console.log(`   🏠 Room ID: ${roomId || "Not provided"}`);
@@ -340,10 +182,11 @@ export class EncryptionService {
 
     const finalEncrypted = encrypted + ":" + authTag.toString("hex");
 
+    // Log encryption results for real-time chat messages
     console.log(`   🔢 Generated IV: ${iv.toString("hex")}`);
     console.log(`   🔖 Auth Tag: ${authTag.toString("hex")}`);
-    console.log(`   🔐 Encrypted Content: ${finalEncrypted}`);
-    console.log(`   📊 Encrypted Length: ${finalEncrypted.length} characters`);
+    console.log(`   � Encrypted Content: ${finalEncrypted}`);
+    console.log(`   � Encrypted Length: ${finalEncrypted.length} characters`);
     console.log(
       `   ⏱️  Encryption Time: ${(endTime - startTime).toFixed(2)}ms`
     );
@@ -357,7 +200,7 @@ export class EncryptionService {
   }
 
   /**
-   * Decrypt message content
+   * Decrypt message content using simple hashing
    */
   static decryptMessage(
     encryptedMessage: EncryptedMessage,
@@ -368,6 +211,7 @@ export class EncryptionService {
   ): string {
     const startTime = performance.now();
 
+    // Log decryption for real-time chat messages
     console.log("🔓 [REAL-TIME-CHAT] Message Decryption Started");
     console.log(`   👤 User ID: ${userId || "Not provided"}`);
     console.log(`   🏠 Room ID: ${roomId || "Not provided"}`);
@@ -380,7 +224,7 @@ export class EncryptionService {
     );
     console.log(`   🔢 IV: ${encryptedMessage.iv}`);
     console.log(`   🔑 Key ID: ${encryptedMessage.keyId}`);
-    console.log(`   🔧 Algorithm: AES-256-GCM`);
+    console.log(`   � Algorithm: AES-256-GCM`);
 
     const key = this.deriveAESKey(sharedSecret);
     const iv = Buffer.from(encryptedMessage.iv, "hex");
@@ -397,7 +241,8 @@ export class EncryptionService {
       decrypted += decipher.final("utf8");
       const endTime = performance.now();
 
-      console.log(`   🔖 Auth Tag: ${authTagHex}`);
+      // Log decryption results for real-time chat messages
+      console.log(`   � Auth Tag: ${authTagHex}`);
       console.log(`   📝 Decrypted Content: "${decrypted}"`);
       console.log(`   📏 Decrypted Length: ${decrypted.length} characters`);
       console.log(
@@ -415,7 +260,9 @@ export class EncryptionService {
       console.log(`   🔍 Key ID: ${encryptedMessage.keyId}`);
       console.log(`   🔍 IV: ${encryptedMessage.iv}`);
       console.log("❌ [REAL-TIME-CHAT] Message Decryption Failed");
-      return "[Encrypted message - unable to decrypt]";
+
+      // Throw the error so ChatService can try fallback patterns
+      throw error;
     }
   }
 

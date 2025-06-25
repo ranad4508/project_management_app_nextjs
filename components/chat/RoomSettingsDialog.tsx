@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -29,6 +29,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useUpdateRoomMutation,
   useDeleteRoomMutation,
+  useGetRoomMembersQuery,
+  useInviteMemberByEmailMutation,
+  useRemoveMemberFromRoomMutation,
+  useChangeMemberRoleMutation,
 } from "@/src/store/api/chatApi";
 import { toast } from "sonner";
 import {
@@ -43,6 +47,14 @@ import {
   MessageSquareX,
   AlertTriangle,
   Loader2,
+  Users,
+  UserPlus,
+  UserMinus,
+  Crown,
+  Key,
+  Globe,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import type { ChatRoom } from "@/src/types/chat.types";
 import { MemberRole } from "@/src/enums/user.enum";
@@ -64,6 +76,17 @@ export function RoomSettingsDialog({
   const [updateRoom, { isLoading: isUpdating }] = useUpdateRoomMutation();
   const [deleteRoom, { isLoading: isDeleting }] = useDeleteRoomMutation();
 
+  // Member management hooks
+  const { data: membersData, refetch: refetchMembers } = useGetRoomMembersQuery(
+    room._id
+  );
+  const [inviteMemberByEmail, { isLoading: isInviting }] =
+    useInviteMemberByEmailMutation();
+  const [removeMemberFromRoom, { isLoading: isRemoving }] =
+    useRemoveMemberFromRoomMutation();
+  const [changeMemberRole, { isLoading: isChangingRole }] =
+    useChangeMemberRoleMutation();
+
   // Tab state
   const [activeTab, setActiveTab] = useState("general");
 
@@ -78,6 +101,8 @@ export function RoomSettingsDialog({
   const [formData, setFormData] = useState({
     name: room.name,
     description: room.description || "",
+    type: room.type,
+    isEncrypted: room.isEncrypted,
     settings: {
       allowFileUploads: room.settings.allowFileUploads,
       maxFileSize: room.settings.maxFileSize / (1024 * 1024), // Convert to MB
@@ -86,20 +111,69 @@ export function RoomSettingsDialog({
     },
   });
 
-  const isAdmin =
-    room.members.find((m) => m.user && m.user._id === currentUserId)?.role ===
-    MemberRole.ADMIN;
+  // Member management state
+  const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+
+  // Permission checks
+  const currentMember = room.members.find(
+    (m) => m.user && m.user._id === currentUserId
+  );
+  const isAdmin = currentMember?.role === MemberRole.ADMIN;
   const isOwner = room.createdBy && room.createdBy._id === currentUserId;
+  const isMember = !!currentMember;
+
+  console.log("🔐 [ROOM-SETTINGS] Permission check:", {
+    currentUserId,
+    isOwner,
+    isAdmin,
+    isMember,
+    roomCreator: room.createdBy?._id,
+    roomType: room.type,
+    canEditSettings: isAdmin || isOwner,
+    canDeleteRoom: isOwner && room.type !== "general",
+    canDeleteConversation: isMember,
+    dialogOpen: open,
+    activeTab,
+  });
+
+  // Log when dialog opens
+  useEffect(() => {
+    if (open) {
+      console.log("🔓 [ROOM-SETTINGS] Dialog opened with room:", {
+        roomId: room._id,
+        roomName: room.name,
+        roomType: room.type,
+        isOwner,
+        isAdmin,
+        currentUserId,
+        createdBy: room.createdBy?._id,
+      });
+    }
+  }, [open, room._id, room.name, room.type, isOwner, isAdmin, currentUserId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!isOwner) {
+      toast.error("Only room owners can modify these settings");
+      return;
+    }
+
     try {
+      console.log("🔧 [ROOM-SETTINGS] Updating room settings:", {
+        roomId: room._id,
+        changes: formData,
+        isOwner,
+      });
+
       await updateRoom({
         roomId: room._id,
         data: {
           name: formData.name,
           description: formData.description,
+          type: formData.type,
+          isEncrypted: formData.isEncrypted,
           settings: {
             ...formData.settings,
             maxFileSize: formData.settings.maxFileSize * 1024 * 1024, // Convert back to bytes
@@ -111,10 +185,11 @@ export function RoomSettingsDialog({
         },
       }).unwrap();
 
+      console.log("✅ [ROOM-SETTINGS] Room settings updated successfully");
       toast.success("Room settings updated successfully!");
       onOpenChange(false);
     } catch (error: any) {
-      console.error("Error updating room settings:", error);
+      console.error("❌ [ROOM-SETTINGS] Error updating room settings:", error);
       toast.error(error.message || "Failed to update room settings");
     }
   };
@@ -138,7 +213,99 @@ export function RoomSettingsDialog({
     }
   };
 
+  // Member management functions
+  const handleInviteMember = async () => {
+    if (!newMemberEmail.trim()) {
+      toast.error("Please enter an email address");
+      return;
+    }
+
+    try {
+      console.log("📧 [ROOM-SETTINGS] Inviting member:", {
+        roomId: room._id,
+        email: newMemberEmail,
+        isOwner,
+      });
+
+      const result = await inviteMemberByEmail({
+        roomId: room._id,
+        email: newMemberEmail.trim(),
+      }).unwrap();
+
+      console.log("✅ [ROOM-SETTINGS] Member invited successfully:", result);
+      toast.success(result.message);
+      setNewMemberEmail("");
+      refetchMembers();
+    } catch (error: any) {
+      console.error("❌ [ROOM-SETTINGS] Error inviting member:", error);
+      toast.error(error.message || "Failed to invite member");
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    try {
+      console.log("🚪 [ROOM-SETTINGS] Removing member:", {
+        roomId: room._id,
+        memberId,
+        memberName,
+        isOwner,
+      });
+
+      const result = await removeMemberFromRoom({
+        roomId: room._id,
+        memberId,
+      }).unwrap();
+
+      console.log("✅ [ROOM-SETTINGS] Member removed successfully:", result);
+      toast.success(result.message);
+      refetchMembers();
+    } catch (error: any) {
+      console.error("❌ [ROOM-SETTINGS] Error removing member:", error);
+      toast.error(error.message || "Failed to remove member");
+    }
+  };
+
+  const handleChangeRole = async (
+    memberId: string,
+    newRole: string,
+    memberName: string
+  ) => {
+    try {
+      console.log("👑 [ROOM-SETTINGS] Changing member role:", {
+        roomId: room._id,
+        memberId,
+        newRole,
+        memberName,
+        isOwner,
+      });
+
+      const result = await changeMemberRole({
+        roomId: room._id,
+        memberId,
+        role: newRole,
+      }).unwrap();
+
+      console.log(
+        "✅ [ROOM-SETTINGS] Member role changed successfully:",
+        result
+      );
+      toast.success(result.message);
+      refetchMembers();
+    } catch (error: any) {
+      console.error("❌ [ROOM-SETTINGS] Error changing member role:", error);
+      toast.error(error.message || "Failed to change member role");
+    }
+  };
+
   const handleDeleteRoom = async () => {
+    console.log("🗑️ [ROOM-SETTINGS] Delete room button clicked", {
+      confirmationText,
+      roomName: room.name,
+      isValid: confirmationText === room.name,
+      isOwner,
+      roomType: room.type,
+    });
+
     if (confirmationText !== room.name) {
       toast.error("Please type the room name to confirm deletion");
       return;
@@ -146,8 +313,15 @@ export function RoomSettingsDialog({
 
     setIsProcessing(true);
     try {
+      console.log("🗑️ [ROOM-SETTINGS] Starting room deletion...", {
+        roomId: room._id,
+        roomName: room.name,
+        isOwner,
+      });
+
       await deleteRoom(room._id).unwrap();
 
+      console.log("✅ [ROOM-SETTINGS] Room deleted successfully");
       toast.success("Room deleted successfully");
       setShowDeleteConfirm(false);
       onOpenChange(false);
@@ -157,9 +331,13 @@ export function RoomSettingsDialog({
         typeof room.workspace === "string"
           ? room.workspace
           : (room.workspace as any)?._id || room.workspace;
+
+      console.log("🔄 [ROOM-SETTINGS] Redirecting to workspace chat", {
+        workspaceId,
+      });
       router.push(`/dashboard/workspaces/${workspaceId}/chat`);
     } catch (error: any) {
-      console.error("Error deleting room:", error);
+      console.error("❌ [ROOM-SETTINGS] Error deleting room:", error);
       toast.error(error.message || "Failed to delete room");
     } finally {
       setIsProcessing(false);
@@ -167,16 +345,26 @@ export function RoomSettingsDialog({
   };
 
   const handleDeleteConversation = async () => {
-    if (confirmationText !== "DELETE MESSAGES") {
-      toast.error("Please type 'DELETE MESSAGES' to confirm");
+    const expectedText =
+      isOwner || isAdmin ? "DELETE MESSAGES" : "HIDE MESSAGES";
+    if (confirmationText !== expectedText) {
+      toast.error(`Please type '${expectedText}' to confirm`);
       return;
     }
 
     setIsProcessing(true);
     try {
+      console.log(
+        "🗑️ [ROOM-SETTINGS] Deleting conversation for user:",
+        currentUserId
+      );
+
       const response = await fetch(`/api/chat/rooms/${room._id}/messages`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": currentUserId,
+        },
       });
 
       if (!response.ok) {
@@ -184,14 +372,33 @@ export function RoomSettingsDialog({
         throw new Error(error.message || "Failed to delete conversation");
       }
 
-      toast.success("All messages deleted successfully");
+      const result = await response.json();
+      console.log("✅ [ROOM-SETTINGS] Conversation deleted:", result);
+
+      const actionType = result.data?.type || "deleted";
+      const messageCount = result.data?.deletedCount || 0;
+
+      if (actionType === "hidden") {
+        toast.success(
+          `Successfully hid ${messageCount} messages from your view`
+        );
+      } else {
+        toast.success(
+          `Successfully deleted ${messageCount} messages for everyone`
+        );
+      }
       setShowDeleteConversationConfirm(false);
       setConfirmationText("");
 
+      // Close the dialog and refresh the chat
+      onOpenChange(false);
+
       // Refresh the page to show empty conversation
-      window.location.reload();
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (error: any) {
-      console.error("Error deleting conversation:", error);
+      console.error("❌ [ROOM-SETTINGS] Error deleting conversation:", error);
       toast.error(error.message || "Failed to delete conversation");
     } finally {
       setIsProcessing(false);
@@ -213,7 +420,10 @@ export function RoomSettingsDialog({
         onOpenChange(open);
       }}
     >
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="sm:max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col pointer-events-auto"
+        style={{ pointerEvents: "auto", cursor: "default" }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Settings className="h-5 w-5" />
@@ -223,16 +433,26 @@ export function RoomSettingsDialog({
 
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={(value) => {
+            console.log("🔄 [ROOM-SETTINGS] Tab changed to:", value);
+            setActiveTab(value);
+          }}
           className="flex-1 flex flex-col"
         >
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger
               value="general"
               className="flex items-center space-x-2"
             >
               <Edit className="h-4 w-4" />
               <span className="hidden sm:inline">General</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="members"
+              className="flex items-center space-x-2"
+            >
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Members</span>
             </TabsTrigger>
             <TabsTrigger
               value="settings"
@@ -273,7 +493,7 @@ export function RoomSettingsDialog({
                       onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
                       }
-                      disabled={!isAdmin && !isOwner}
+                      disabled={!isOwner}
                       maxLength={50}
                       required
                     />
@@ -293,7 +513,7 @@ export function RoomSettingsDialog({
                           description: e.target.value,
                         })
                       }
-                      disabled={!isAdmin && !isOwner}
+                      disabled={!isOwner}
                       rows={3}
                       maxLength={200}
                       placeholder="Room description..."
@@ -303,6 +523,67 @@ export function RoomSettingsDialog({
                     </p>
                   </div>
                 </div>
+
+                {/* Owner-only Advanced Settings */}
+                {isOwner && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="space-y-2">
+                      <Label htmlFor="roomType">Room Type</Label>
+                      <Select
+                        value={formData.type}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, type: value as any })
+                        }
+                        disabled={room.type === "general"} // Can't change general rooms
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="private">
+                            <div className="flex items-center space-x-2">
+                              <Lock className="h-4 w-4" />
+                              <span>Private</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="general">
+                            <div className="flex items-center space-x-2">
+                              <Globe className="h-4 w-4" />
+                              <span>General</span>
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {room.type === "general"
+                          ? "General rooms cannot be changed to private"
+                          : "Private rooms require invitation to join"}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>End-to-End Encryption</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Secure messages with encryption
+                          </p>
+                        </div>
+                        <Switch
+                          checked={formData.isEncrypted}
+                          onCheckedChange={(checked) =>
+                            setFormData({ ...formData, isEncrypted: checked })
+                          }
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formData.isEncrypted
+                          ? "Messages are encrypted end-to-end"
+                          : "Messages are stored in plain text"}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Room Info */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
@@ -341,7 +622,7 @@ export function RoomSettingsDialog({
                 >
                   Cancel
                 </Button>
-                {(isAdmin || isOwner) && (
+                {isOwner && (
                   <Button type="submit" disabled={isUpdating}>
                     {isUpdating ? (
                       <>
@@ -357,12 +638,176 @@ export function RoomSettingsDialog({
             </form>
           </TabsContent>
 
+          {/* Members Tab */}
+          <TabsContent
+            value="members"
+            className="flex-1 overflow-y-auto space-y-6"
+          >
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium flex items-center space-x-2">
+                  <Users className="h-5 w-5" />
+                  <span>Room Members</span>
+                  <Badge variant="outline">
+                    {membersData?.members.length || room.members.length}
+                  </Badge>
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Manage room members and their permissions.
+                </p>
+              </div>
+
+              {/* Add Member (Owner Only) */}
+              {isOwner && (
+                <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-green-800 flex items-center space-x-2">
+                      <UserPlus className="h-4 w-4" />
+                      <span>Invite New Member</span>
+                    </h4>
+                    <div className="flex space-x-2">
+                      <Input
+                        placeholder="Enter email address"
+                        value={newMemberEmail}
+                        onChange={(e) => setNewMemberEmail(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleInviteMember}
+                        disabled={!newMemberEmail || isInviting}
+                        size="sm"
+                      >
+                        {isInviting ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            Invite
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Members List */}
+              <div className="space-y-4">
+                <h4 className="font-medium">Current Members</h4>
+                <div className="space-y-3">
+                  {(membersData?.members || room.members).map((member) => (
+                    <div
+                      key={member._id || member.user._id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium">
+                          {(member.name || member.user.name)
+                            .charAt(0)
+                            .toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium flex items-center space-x-2">
+                            <span>{member.name || member.user.name}</span>
+                            {(member.isOwner ||
+                              (member.user &&
+                                member.user._id === room.createdBy._id)) && (
+                              <Crown className="h-4 w-4 text-yellow-500" />
+                            )}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {member.email || member.user.email}
+                          </p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge
+                              variant={
+                                member.role === MemberRole.ADMIN
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {member.role}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Joined{" "}
+                              {new Date(member.joinedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Member Actions (Owner Only) */}
+                      {isOwner &&
+                        (member._id || member.user._id) !== currentUserId && (
+                          <div className="flex items-center space-x-2">
+                            <Select
+                              value={member.role}
+                              onValueChange={(newRole) => {
+                                const memberId = member._id || member.user._id;
+                                const memberName =
+                                  member.name || member.user.name;
+                                handleChangeRole(memberId, newRole, memberName);
+                              }}
+                              disabled={isChangingRole}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={MemberRole.ADMIN}>
+                                  Admin
+                                </SelectItem>
+                                <SelectItem value={MemberRole.MODERATOR}>
+                                  Moderator
+                                </SelectItem>
+                                <SelectItem value={MemberRole.MEMBER}>
+                                  Member
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const memberId = member._id || member.user._id;
+                                const memberName =
+                                  member.name || member.user.name;
+                                handleRemoveMember(memberId, memberName);
+                              }}
+                              disabled={isRemoving}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              {isRemoving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <UserMinus className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
           {/* Settings Tab */}
           <TabsContent
             value="settings"
             className="flex-1 overflow-y-auto space-y-6"
           >
             <div className="space-y-6">
+              {/* Owner-only warning */}
+              {!isOwner && (
+                <Alert>
+                  <Lock className="h-4 w-4" />
+                  <AlertDescription>
+                    Only the room owner can modify these settings. You can view
+                    the current configuration below.
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* File Upload Settings */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium flex items-center space-x-2">
@@ -388,7 +833,7 @@ export function RoomSettingsDialog({
                         },
                       })
                     }
-                    disabled={!isAdmin && !isOwner}
+                    disabled={!isOwner}
                   />
                 </div>
 
@@ -409,7 +854,7 @@ export function RoomSettingsDialog({
                             },
                           })
                         }
-                        disabled={!isAdmin && !isOwner}
+                        disabled={!isOwner}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -440,7 +885,7 @@ export function RoomSettingsDialog({
                             },
                           })
                         }
-                        disabled={!isAdmin && !isOwner}
+                        disabled={!isOwner}
                         placeholder="image/*, application/pdf, text/*"
                       />
                       <p className="text-xs text-muted-foreground">
@@ -475,7 +920,7 @@ export function RoomSettingsDialog({
                         },
                       })
                     }
-                    disabled={!isAdmin && !isOwner}
+                    disabled={!isOwner}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -510,11 +955,11 @@ export function RoomSettingsDialog({
                       encrypted on your device and can only be read by room
                       members.
                     </p>
-                    {room.encryptionKeyId && (
+                    {/* {room.encryptionKeyId && (
                       <p className="text-xs text-green-600 mt-2 font-mono">
                         Key ID: {room.encryptionKeyId}
                       </p>
-                    )}
+                    )} */}
                   </div>
                 </>
               )}
@@ -534,7 +979,7 @@ export function RoomSettingsDialog({
                 </p>
               </div>
 
-              {/* Archive Room */}
+              {/* Archive Room - Only for Room Owner or Admin */}
               {(isAdmin || isOwner) && !showArchiveConfirm && (
                 <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
                   <div className="flex items-start space-x-3">
@@ -655,8 +1100,8 @@ export function RoomSettingsDialog({
                 </p>
               </div>
 
-              {/* Delete Conversation */}
-              {!showDeleteConversationConfirm && (
+              {/* Delete Conversation - Available for all members */}
+              {isMember && !showDeleteConversationConfirm && (
                 <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
                   <div className="flex items-start space-x-3">
                     <MessageSquareX className="h-5 w-5 text-orange-600 mt-0.5" />
@@ -665,8 +1110,9 @@ export function RoomSettingsDialog({
                         Delete Conversation
                       </h4>
                       <p className="text-sm text-orange-700 mt-1">
-                        Delete all messages in this room. The room itself will
-                        remain active.
+                        {isOwner || isAdmin
+                          ? "Delete all messages in this room for everyone. This action cannot be undone."
+                          : "Hide all messages in this room from your view only. Other members will still see the messages. The room itself will remain active."}
                       </p>
                       <Button
                         onClick={() => setShowDeleteConversationConfirm(true)}
@@ -675,7 +1121,9 @@ export function RoomSettingsDialog({
                         className="mt-3 border-orange-300 text-orange-700 hover:bg-orange-100"
                       >
                         <MessageSquareX className="mr-2 h-4 w-4" />
-                        Delete Conversation
+                        {isOwner || isAdmin
+                          ? "Delete Conversation"
+                          : "Hide Conversation"}
                       </Button>
                     </div>
                   </div>
@@ -689,19 +1137,33 @@ export function RoomSettingsDialog({
                   <AlertDescription>
                     <div className="space-y-3">
                       <p>
-                        <strong>Delete all messages?</strong>
+                        <strong>
+                          {isOwner || isAdmin
+                            ? "Delete all messages for everyone?"
+                            : "Hide all messages from your view?"}
+                        </strong>
                       </p>
                       <p className="text-sm">
-                        This will permanently delete all messages, reactions,
-                        and files in this room. The room will remain active for
-                        new messages.
+                        {isOwner || isAdmin
+                          ? "This will permanently delete all messages, reactions, and files in this room for all members. The room will remain active for new messages."
+                          : "This will hide all messages from your view only. Other members will still see all messages. The room will remain active for new messages."}
                       </p>
                       <div className="space-y-2">
-                        <Label>Type "DELETE MESSAGES" to confirm:</Label>
+                        <Label>
+                          Type "
+                          {isOwner || isAdmin
+                            ? "DELETE MESSAGES"
+                            : "HIDE MESSAGES"}
+                          " to confirm:
+                        </Label>
                         <Input
                           value={confirmationText}
                           onChange={(e) => setConfirmationText(e.target.value)}
-                          placeholder="DELETE MESSAGES"
+                          placeholder={
+                            isOwner || isAdmin
+                              ? "DELETE MESSAGES"
+                              : "HIDE MESSAGES"
+                          }
                           className="max-w-xs"
                         />
                       </div>
@@ -709,8 +1171,10 @@ export function RoomSettingsDialog({
                         <Button
                           onClick={handleDeleteConversation}
                           disabled={
-                            confirmationText !== "DELETE MESSAGES" ||
-                            isProcessing
+                            confirmationText !==
+                              (isOwner || isAdmin
+                                ? "DELETE MESSAGES"
+                                : "HIDE MESSAGES") || isProcessing
                           }
                           variant="destructive"
                           size="sm"
@@ -718,12 +1182,14 @@ export function RoomSettingsDialog({
                           {isProcessing ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Deleting...
+                              {isOwner || isAdmin ? "Deleting..." : "Hiding..."}
                             </>
                           ) : (
                             <>
                               <MessageSquareX className="mr-2 h-4 w-4" />
-                              Delete Messages
+                              {isOwner || isAdmin
+                                ? "Delete Messages"
+                                : "Hide Messages"}
                             </>
                           )}
                         </Button>
@@ -743,8 +1209,8 @@ export function RoomSettingsDialog({
                 </Alert>
               )}
 
-              {/* Delete Room */}
-              {(isAdmin || isOwner) && room.type !== "general" && (
+              {/* Delete Room - Only for Room Owner */}
+              {isOwner && room.type !== "general" && (
                 <>
                   <Separator />
 
@@ -761,7 +1227,12 @@ export function RoomSettingsDialog({
                             cannot be undone.
                           </p>
                           <Button
-                            onClick={() => setShowDeleteConfirm(true)}
+                            onClick={() => {
+                              console.log(
+                                "🗑️ [ROOM-SETTINGS] Delete room button clicked - showing confirmation"
+                              );
+                              setShowDeleteConfirm(true);
+                            }}
                             variant="destructive"
                             size="sm"
                             className="mt-3"

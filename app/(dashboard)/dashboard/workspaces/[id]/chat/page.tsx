@@ -31,9 +31,9 @@ export default function ChatPage() {
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false); // Add this state
 
-  const { rooms, activeRoomId, isSidebarOpen, isConnected } = useSelector(
-    (state: RootState) => state.chat
-  );
+  const { rooms, activeRoomId, isSidebarOpen, isConnected, onlineUsers } =
+    useSelector((state: RootState) => state.chat);
+  const { user: currentUser } = useSelector((state: RootState) => state.auth);
   console.log("Check connection:", isConnected);
 
   const {
@@ -171,7 +171,14 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <ChatSidebar rooms={rooms} workspaceId={workspaceId} />
+          <ChatSidebar
+            rooms={rooms}
+            activeRoomId={activeRoomId}
+            currentUser={currentUser}
+            onlineUsers={onlineUsers || []}
+            isConnected={isConnected}
+            workspaceId={workspaceId}
+          />
         </div>
 
         {/* Main Chat Area - Responsive */}

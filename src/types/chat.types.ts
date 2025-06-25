@@ -215,6 +215,8 @@ export interface CreateRoomData {
 export interface UpdateRoomData {
   name?: string;
   description?: string;
+  type?: RoomType;
+  isEncrypted?: boolean;
   isArchived?: boolean;
   settings?: Partial<ChatRoom["settings"]>;
 }

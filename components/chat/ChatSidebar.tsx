@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { setActiveRoom } from "@/src/store/slices/chatSlice";
+import { useDispatch } from "react-redux";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -12,26 +11,32 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EncryptionStatus } from "./EncryptionStatus";
-import { Hash, Lock, Users, MoreHorizontal, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
-import { InviteToRoomDialog } from "./InviteToRoomDialog";
+import { setActiveRoom } from "@/src/store/slices/chatSlice";
+import { Hash, Lock, Users, MoreHorizontal, UserPlus } from "lucide-react";
 import type { ChatRoom } from "@/src/types/chat.types";
-import type { RootState } from "@/src/store";
 import { MemberRole } from "@/src/enums/user.enum";
+import { InviteToRoomDialog } from "./InviteToRoomDialog";
+import { EncryptionStatus } from "./EncryptionStatus";
 
 interface ChatSidebarProps {
   rooms: ChatRoom[];
+  activeRoomId: string | null;
+  currentUser: any;
+  onlineUsers: Array<{ userId: string; userName: string }>;
+  isConnected: boolean;
   workspaceId: string;
 }
 
-export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
+export function ChatSidebar({
+  rooms,
+  activeRoomId,
+  currentUser,
+  onlineUsers,
+  isConnected,
+  workspaceId,
+}: ChatSidebarProps) {
   const dispatch = useDispatch();
-  const { activeRoomId, onlineUsers, isConnected } = useSelector(
-    (state: RootState) => state.chat
-  );
-  const { user: currentUser } = useSelector((state: RootState) => state.auth);
   const [inviteRoom, setInviteRoom] = useState<ChatRoom | null>(null);
 
   const handleRoomSelect = (roomId: string) => {
@@ -44,28 +49,56 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
   };
 
   const getRoomIcon = (room: ChatRoom) => {
-    if (room.type === "general") {
-      return <Hash className="h-4 w-4" />;
-    }
-    return room.isEncrypted ? (
+    return room.type === "private" ? (
       <Lock className="h-4 w-4" />
+    ) : room.type === "general" ? (
+      <Hash className="h-4 w-4" />
     ) : (
       <Users className="h-4 w-4" />
     );
   };
 
   const getOnlineMembersCount = (room: ChatRoom) => {
-    return room.members.filter((member) =>
-      onlineUsers.some((user) => user.userId === member.user._id)
-    ).length;
+    console.log(`👥 [SIDEBAR] Calculating online count for room: ${room.name}`);
+    console.log(`👥 [SIDEBAR] Total online users: ${onlineUsers.length}`);
+    console.log(
+      `👥 [SIDEBAR] Online users:`,
+      onlineUsers.map((u) => ({ id: u.userId, name: u.userName }))
+    );
+    console.log(
+      `👥 [SIDEBAR] Room members:`,
+      room.members
+        .filter((m) => m.user)
+        .map((m) => ({ id: m.user._id, name: m.user.name }))
+    );
+
+    const count = room.members.filter((member) => {
+      if (!member.user) return false; // Skip members with null user
+      const memberId = member.user._id;
+      const isOnline = onlineUsers.some((user) => user.userId === memberId);
+      console.log(
+        `👥 [SIDEBAR] Member ${member.user.name} (${memberId}): ${
+          isOnline ? "ONLINE" : "OFFLINE"
+        }`
+      );
+      return isOnline;
+    }).length;
+
+    console.log(
+      `👥 [SIDEBAR] Room ${room.name}: ${count} online out of ${room.members.length} members`
+    );
+
+    return count;
   };
 
   const canInviteToRoom = (room: ChatRoom) => {
     if (room.type !== "private") return false;
-    const userMember = room.members.find((m) => m.user._id === currentUser?.id);
+    const userMember = room.members.find(
+      (m) => m.user && m.user._id === currentUser?.id
+    );
     return (
       userMember?.role === MemberRole.ADMIN ||
-      room.createdBy._id === currentUser?.id
+      room.createdBy?._id === currentUser?.id
     );
   };
 
@@ -117,44 +150,18 @@ export function ChatSidebar({ rooms, workspaceId }: ChatSidebarProps) {
                         />
                       </div>
 
-                      {room.lastMessage && (
-                        <p className="text-xs text-muted-foreground truncate mt-1 hidden sm:block">
-                          <span className="font-medium">
-                            {room.lastMessage.sender.name}:
-                          </span>{" "}
-                          {room.lastMessage.content}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between mt-1 sm:mt-2">
-                        <div className="flex items-center space-x-1 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3" />
-                          <span>{room.members.length}</span>
-                          {onlineMembersCount > 0 && (
-                            <>
-                              <span className="hidden sm:inline">•</span>
-                              <span className="text-green-600 hidden sm:inline">
-                                {onlineMembersCount} online
-                              </span>
-                            </>
-                          )}
-                        </div>
-
-                        {room.lastActivity && (
-                          <span className="text-xs text-muted-foreground hidden sm:inline">
-                            {formatDistanceToNow(new Date(room.lastActivity), {
-                              addSuffix: true,
-                            })}
-                          </span>
-                        )}
+                      {/* Online members count */}
+                      <div className="flex items-center space-x-1 mt-1 text-xs text-muted-foreground">
+                        <Users className="h-3 w-3" />
+                        <span>{onlineMembersCount} online</span>
                       </div>
                     </div>
                   </div>
                 </Button>
 
-                {/* Room actions dropdown */}
+                {/* Invite button for private rooms */}
                 {canInvite && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button

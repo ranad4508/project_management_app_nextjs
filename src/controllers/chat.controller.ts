@@ -299,4 +299,95 @@ export class ChatController {
       });
     }
   );
+
+  // Member management
+  removeMemberFromRoom = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string; memberId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId, memberId } = params;
+
+      const result = await this.chatService.removeMemberFromRoom(
+        roomId,
+        user.id,
+        memberId
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    }
+  );
+
+  changeMemberRole = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string; memberId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId, memberId } = params;
+      const { role } = await req.json();
+
+      const result = await this.chatService.changeMemberRole(
+        roomId,
+        user.id,
+        memberId,
+        role
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    }
+  );
+
+  inviteMemberByEmail = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+      const { email } = await req.json();
+
+      const result = await this.chatService.inviteMemberByEmail(
+        roomId,
+        user.id,
+        email
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    }
+  );
+
+  getRoomMembers = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ roomId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { roomId } = params;
+
+      const result = await this.chatService.getRoomMembers(roomId, user.id);
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+      });
+    }
+  );
 }

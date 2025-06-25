@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { MessageItem } from "./MessageItem";
@@ -11,6 +11,7 @@ interface MessageListProps {
   messages: ChatMessage[];
   isLoading: boolean;
   error: any;
+  hasMore: boolean;
   onLoadMore: () => void;
 }
 
@@ -18,10 +19,14 @@ export function MessageList({
   messages,
   isLoading,
   error,
+  hasMore,
   onLoadMore,
 }: MessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const [hasMore, setHasMore] = useState(true);
+
+  // Debug logging
+  console.log(`📋 [MESSAGE-LIST] Rendering ${messages.length} messages`);
+  console.log(`📄 [MESSAGE-LIST] Has more: ${hasMore}, Loading: ${isLoading}`);
 
   if (error) {
     return (
