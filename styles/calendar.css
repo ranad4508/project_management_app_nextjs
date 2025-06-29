@@ -1,0 +1,243 @@
+/* Custom styles for React Big Calendar */
+.rbc-calendar {
+  font-family: "Inter", sans-serif;
+}
+
+.rbc-header {
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.rbc-month-view {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-date-cell {
+  padding: 8px;
+  border-right: 1px solid #e2e8f0;
+}
+
+.rbc-date-cell:last-child {
+  border-right: none;
+}
+
+.rbc-day-bg {
+  border-right: 1px solid #e2e8f0;
+}
+
+.rbc-day-bg:last-child {
+  border-right: none;
+}
+
+.rbc-today {
+  background-color: #d2edeb !important;
+}
+
+.rbc-off-range-bg {
+  background-color: #f9fafb;
+}
+
+.rbc-event {
+  border-radius: 4px;
+  border: none;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  margin: 1px 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.rbc-event:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.rbc-event-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rbc-event-content {
+  font-size: 12px;
+}
+
+.rbc-toolbar {
+  margin-bottom: 20px;
+  padding: 0 16px;
+}
+
+.rbc-toolbar button {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.2s;
+}
+
+.rbc-toolbar button:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.rbc-toolbar-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.rbc-btn-group {
+  display: inline-flex;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rbc-btn-group button {
+  border-radius: 0;
+  border-right: none;
+}
+
+.rbc-btn-group button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.rbc-btn-group button:last-child {
+  border-radius: 0 6px 6px 0;
+  border-right: 1px solid #d1d5db;
+}
+
+.rbc-show-more {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  margin-top: 2px;
+}
+
+.rbc-show-more:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.rbc-popup {
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e2e8f0;
+}
+
+.rbc-popup .rbc-popup-header {
+  background-color: #f8fafc;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  color: #374151;
+}
+
+.rbc-time-view {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-time-header {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rbc-time-content {
+  border-top: none;
+}
+
+.rbc-timeslot-group {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.rbc-time-slot {
+  border-top: 1px solid #f1f5f9;
+}
+
+.rbc-current-time-indicator {
+  background-color: #ef4444;
+  height: 2px;
+  z-index: 3;
+}
+
+/* Gantt Chart Custom Styles */
+.gantt-container {
+  font-family: "Inter", sans-serif;
+}
+
+.gantt-container .gantt-table {
+  border-right: 1px solid #e2e8f0;
+}
+
+.gantt-container .gantt-table-header {
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.gantt-container .gantt-table-body {
+  background-color: #ffffff;
+}
+
+.gantt-container .gantt-row {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.gantt-container .gantt-row:hover {
+  background-color: #f8fafc;
+}
+
+.gantt-container .gantt-task-bar {
+  border-radius: 4px;
+}
+
+.gantt-container .gantt-task-bar-project {
+  border-radius: 6px;
+  height: 24px;
+}
+
+.gantt-container .gantt-task-bar-task {
+  border-radius: 4px;
+  height: 20px;
+}
+
+.gantt-container .gantt-task-bar-milestone {
+  border-radius: 50%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .rbc-toolbar {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .rbc-toolbar .rbc-toolbar-label {
+    text-align: center;
+    order: -1;
+  }
+
+  .rbc-btn-group {
+    justify-content: center;
+  }
+
+  .rbc-event {
+    font-size: 11px;
+    padding: 1px 4px;
+  }
+}

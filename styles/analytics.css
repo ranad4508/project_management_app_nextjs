@@ -1,0 +1,313 @@
+/* Custom styles for Analytics Dashboard */
+
+/* Chart containers */
+.recharts-wrapper {
+  font-family: "Inter", sans-serif;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: #e5e7eb;
+  stroke-width: 1;
+}
+
+.recharts-tooltip-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.recharts-default-tooltip {
+  background-color: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+.recharts-tooltip-label {
+  color: #374151 !important;
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+}
+
+.recharts-tooltip-item {
+  color: #6b7280 !important;
+}
+
+/* Pie chart labels */
+.recharts-pie-label-text {
+  font-size: 12px;
+  font-weight: 500;
+  fill: #374151;
+}
+
+/* Bar chart styling */
+.recharts-bar {
+  transition: opacity 0.2s ease;
+}
+
+.recharts-bar:hover {
+  opacity: 0.8;
+}
+
+/* Legend styling */
+.recharts-legend-wrapper {
+  padding-top: 20px;
+}
+
+.recharts-legend-item-text {
+  color: #374151 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Axis styling */
+.recharts-xAxis .recharts-cartesian-axis-tick-value,
+.recharts-yAxis .recharts-cartesian-axis-tick-value {
+  fill: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .recharts-pie-label-text {
+    font-size: 10px;
+  }
+
+  .recharts-xAxis .recharts-cartesian-axis-tick-value,
+  .recharts-yAxis .recharts-cartesian-axis-tick-value {
+    font-size: 10px;
+  }
+
+  .recharts-legend-item-text {
+    font-size: 12px !important;
+  }
+}
+
+/* Analytics cards */
+.analytics-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.analytics-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Metric cards */
+.metric-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.3s ease;
+}
+
+.metric-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Progress bars */
+.progress-bar {
+  background-color: #f1f5f9;
+  border-radius: 9999px;
+  height: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.5s ease;
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Chart animations */
+.recharts-bar,
+.recharts-area,
+.recharts-line {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.recharts-pie-sector {
+  animation: fadeIn 0.8s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Export button styling */
+.export-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border: none;
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.export-button:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.export-button:disabled {
+  background: #9ca3af;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Filter section */
+.filter-section {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+/* Workspace overview styling */
+.workspace-item {
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.2s ease;
+}
+
+.workspace-item:hover {
+  background: linear-gradient(135deg, #f1f5f9 0%, #f8fafc 100%);
+  border-color: #cbd5e1;
+  transform: translateX(4px);
+}
+
+/* Performance insights */
+.performance-insight {
+  text-align: center;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.performance-insight:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Heatmap grid styles */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 2rem repeat(24, 1fr);
+  gap: 2px;
+  align-items: center;
+}
+
+.heatmap-row {
+  display: grid;
+  grid-template-columns: 2rem repeat(24, 1fr);
+  gap: 2px;
+  align-items: center;
+}
+
+.heatmap-cell {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s ease;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.1);
+  border-color: #9ca3af;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.heatmap-legend-scale {
+  display: flex;
+  gap: 2px;
+}
+
+.heatmap-legend-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid #e5e7eb;
+}
+
+/* Print styles for PDF export */
+@media print {
+  .analytics-card,
+  .metric-card,
+  .filter-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .recharts-wrapper {
+    break-inside: avoid;
+  }
+
+  .heatmap-grid,
+  .heatmap-row {
+    break-inside: avoid;
+  }
+}

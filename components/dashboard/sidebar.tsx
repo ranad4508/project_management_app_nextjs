@@ -123,7 +123,6 @@ export function DashboardSidebar() {
                 isActive={pathname === "/dashboard/calendar"}
                 isCollapsed={isCollapsed}
               />
-
               <NavItem
                 href="/dashboard/analytics"
                 icon={<BarChart3 className="h-4 w-4" />}
