@@ -124,6 +124,13 @@ export class FileUploadService {
         "image/avif": ".avif",
         "image/heic": ".heic",
         "image/heif": ".heif",
+        "image/jfif": ".jfif",
+        "image/pjpeg": ".pjpeg",
+        "image/x-portable-pixmap": ".ppm",
+        "image/x-portable-graymap": ".pgm",
+        "image/x-portable-bitmap": ".pbm",
+        "image/x-xbitmap": ".xbm",
+        "image/x-xpixmap": ".xpm",
 
         // Documents
         "application/pdf": ".pdf",
@@ -150,6 +157,12 @@ export class FileUploadService {
         "video/x-msvideo": ".avi",
         "video/webm": ".webm",
         "video/ogg": ".ogv",
+        "video/x-matroska": ".mkv",
+        "video/x-flv": ".flv",
+        "video/x-ms-wmv": ".wmv",
+        "video/3gpp": ".3gp",
+        "video/mp2t": ".ts",
+        "video/x-m4v": ".m4v",
 
         // Audio
         "audio/mpeg": ".mp3",
@@ -157,6 +170,12 @@ export class FileUploadService {
         "audio/ogg": ".ogg",
         "audio/aac": ".aac",
         "audio/flac": ".flac",
+        "audio/x-m4a": ".m4a",
+        "audio/mp4": ".m4a",
+        "audio/x-ms-wma": ".wma",
+        "audio/opus": ".opus",
+        "audio/x-aiff": ".aiff",
+        "audio/webm": ".webm",
 
         // Archives
         "application/zip": ".zip",

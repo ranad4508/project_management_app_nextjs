@@ -31,11 +31,13 @@ import {
   Settings,
   UserPlus,
   MoreVertical,
+  RefreshCw,
 } from "lucide-react";
 import { selectOnlineUsersInRoom } from "@/src/store/slices/chatSlice";
 import type { ChatRoom } from "@/src/types/chat.types";
 import type { RootState } from "@/src/store";
 import { MemberRole } from "@/src/enums/user.enum";
+import { toast } from "sonner";
 
 interface ChatHeaderProps {
   room: ChatRoom;
@@ -63,6 +65,7 @@ export function ChatHeader({ room }: ChatHeaderProps) {
   const [showMembers, setShowMembers] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [isRegeneratingKeys, setIsRegeneratingKeys] = useState(false);
 
   // Keep these for potential future use in room actions dropdown
   const isOwner =
@@ -75,6 +78,50 @@ export function ChatHeader({ room }: ChatHeaderProps) {
         String(m.user._id) === String(currentUser?.id))
   );
   const isAdmin = userMember?.role === "admin" || isOwner;
+
+  const handleRegenerateKeys = async () => {
+    if (!isAdmin) return;
+
+    setIsRegeneratingKeys(true);
+    try {
+      const response = await fetch(
+        `/api/chat/rooms/${room._id}/regenerate-keys`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        // Show success message
+        console.log("🔑 Encryption keys regenerated successfully");
+        toast.success(
+          "Encryption keys regenerated successfully! The page will reload to apply changes.",
+          {
+            duration: 3000,
+            action: {
+              label: "Reload Now",
+              onClick: () => window.location.reload(),
+            },
+          }
+        );
+        // Auto-reload after 3 seconds
+        setTimeout(() => window.location.reload(), 3000);
+      } else {
+        console.error("❌ Failed to regenerate encryption keys");
+        toast.error("Failed to regenerate encryption keys. Please try again.");
+      }
+    } catch (error) {
+      console.error("❌ Error regenerating encryption keys:", error);
+      toast.error(
+        "An error occurred while regenerating keys. Please try again."
+      );
+    } finally {
+      setIsRegeneratingKeys(false);
+    }
+  };
 
   const getRoomIcon = () => {
     if (room.type === "general") {
@@ -185,6 +232,25 @@ export function ChatHeader({ room }: ChatHeaderProps) {
                 <Settings className="mr-2 h-4 w-4" />
                 Room Settings
               </DropdownMenuItem>
+
+              {isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleRegenerateKeys}
+                    disabled={isRegeneratingKeys}
+                  >
+                    <RefreshCw
+                      className={`mr-2 h-4 w-4 ${
+                        isRegeneratingKeys ? "animate-spin" : ""
+                      }`}
+                    />
+                    {isRegeneratingKeys
+                      ? "Regenerating Keys..."
+                      : "Regenerate Encryption Keys"}
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

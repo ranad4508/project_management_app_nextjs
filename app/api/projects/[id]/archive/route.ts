@@ -5,7 +5,7 @@ const projectController = new ProjectController();
 
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await Database.connect();
   return projectController.archiveProject(req as any, { params });

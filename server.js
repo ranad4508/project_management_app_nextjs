@@ -31,7 +31,7 @@ app.prepare().then(async () => {
     }
   });
 
-  // Initialize Socket.IO with online users tracking
+  // Initialize Socket.IO with online users tracking and large file support
   const io = new Server(server, {
     path: "/api/socket/io",
     cors: {
@@ -41,6 +41,17 @@ app.prepare().then(async () => {
     },
     transports: ["websocket", "polling"],
     allowEIO3: true,
+    // Increase limits for file uploads
+    maxHttpBufferSize: 100 * 1024 * 1024, // 100MB (same as frontend limit)
+    pingTimeout: 60000, // 60 seconds
+    pingInterval: 25000, // 25 seconds
+    upgradeTimeout: 30000, // 30 seconds
+    // Allow larger payloads
+    perMessageDeflate: {
+      threshold: 1024,
+      concurrencyLimit: 10,
+      memLevel: 7,
+    },
   });
 
   // Online users tracking

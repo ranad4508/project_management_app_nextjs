@@ -202,18 +202,189 @@ export const chatApi = createApi({
       },
     }),
 
+    editMessage: builder.mutation<
+      ChatMessage,
+      { messageId: string; content: string; roomId: string }
+    >({
+      query: ({ messageId, content }) => ({
+        url: `messages/${messageId}`,
+        method: "PUT",
+        body: { content },
+      }),
+      // Update cache with server response after successful edit
+      onQueryStarted: async (
+        { messageId, content, roomId },
+        { dispatch, queryFulfilled }
+      ) => {
+        try {
+          const result = await queryFulfilled;
+          console.log(
+            "🔄 [API] Edit successful, updating cache with:",
+            result.data
+          );
+
+          // Update the cache with the actual server response
+          dispatch(
+            chatApi.util.updateQueryData(
+              "getRoomMessages",
+              { roomId, page: 1, limit: 50 },
+              (draft) => {
+                const messageIndex = draft.messages.findIndex(
+                  (msg) => msg._id === messageId
+                );
+                if (messageIndex !== -1 && result.data) {
+                  console.log("📝 [API] Updating message in cache:", {
+                    oldContent: draft.messages[messageIndex].content,
+                    newContent: result.data.content,
+                  });
+                  // Replace the entire message with server data
+                  draft.messages[messageIndex] = result.data;
+                }
+              }
+            )
+          );
+        } catch (error) {
+          console.error("❌ [API] Edit failed:", error);
+          throw error;
+        }
+      },
+      invalidatesTags: (result, error, { roomId }) => [
+        { type: "ChatMessage", id: roomId },
+        { type: "ChatMessage", id: "LIST" },
+      ],
+      transformResponse: (response: ApiResponse<ChatMessage>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to edit message");
+      },
+    }),
+
+    deleteMessage: builder.mutation<
+      void,
+      {
+        messageId: string;
+        roomId: string;
+        deleteType: "delete_for_me" | "unsend_for_everyone";
+      }
+    >({
+      query: ({ messageId, deleteType }) => ({
+        url: `messages/${messageId}`,
+        method: "DELETE",
+        body: { deleteType },
+      }),
+      // Use optimistic updates for better UX
+      onQueryStarted: async (
+        { messageId, roomId, deleteType },
+        { dispatch, queryFulfilled }
+      ) => {
+        // Optimistically update the cache with correct query parameters
+        const patchResult = dispatch(
+          chatApi.util.updateQueryData(
+            "getRoomMessages",
+            { roomId, page: 1, limit: 50 }, // Match the actual query parameters used in ChatWindow
+            (draft) => {
+              if (deleteType === "unsend_for_everyone") {
+                // Remove message completely
+                draft.messages = draft.messages.filter(
+                  (msg) => msg._id !== messageId
+                );
+              }
+              // For "delete_for_me", the server handles filtering, so we remove it from cache too
+              else {
+                draft.messages = draft.messages.filter(
+                  (msg) => msg._id !== messageId
+                );
+              }
+            }
+          )
+        );
+
+        try {
+          await queryFulfilled;
+          // Success - the optimistic update stays
+        } catch (error) {
+          // On error, revert the optimistic update
+          patchResult.undo();
+          throw error;
+        }
+      },
+      invalidatesTags: (result, error, { roomId }) => [
+        { type: "ChatMessage", id: roomId },
+        { type: "ChatMessage", id: "LIST" },
+      ],
+      transformResponse: (response: ApiResponse<void>) => {
+        if (response.success) {
+          return;
+        }
+        throw new Error(response.message || "Failed to delete message");
+      },
+    }),
+
     // Reactions
     addReaction: builder.mutation<
       ChatMessage,
-      { messageId: string; type: ReactionType }
+      { messageId: string; type: ReactionType; roomId: string }
     >({
       query: ({ messageId, type }) => ({
         url: `messages/${messageId}/reactions`,
         method: "POST",
         body: { type },
       }),
-      invalidatesTags: (result, error, { messageId }) => [
-        { type: "ChatMessage", id: messageId },
+      // Use optimistic updates for reactions
+      onQueryStarted: async (
+        { messageId, type, roomId },
+        { dispatch, queryFulfilled, getState }
+      ) => {
+        // Get current user from session (we'll need to get this from the component)
+        const patchResult = dispatch(
+          chatApi.util.updateQueryData(
+            "getRoomMessages",
+            { roomId, page: 1, limit: 50 },
+            (draft) => {
+              const message = draft.messages.find(
+                (msg) => msg._id === messageId
+              );
+              if (message) {
+                // Add optimistic reaction (we'll get the real user data from the server response)
+                const tempReaction = {
+                  _id: `temp-${Date.now()}`,
+                  user: { _id: "temp-user", name: "You", email: "" },
+                  type: type,
+                  createdAt: new Date().toISOString(), // Convert to string for serialization
+                };
+                message.reactions.push(tempReaction as any);
+              }
+            }
+          )
+        );
+
+        try {
+          const result = await queryFulfilled;
+          // Update with real reaction data from server
+          dispatch(
+            chatApi.util.updateQueryData(
+              "getRoomMessages",
+              { roomId, page: 1, limit: 50 },
+              (draft) => {
+                const message = draft.messages.find(
+                  (msg) => msg._id === messageId
+                );
+                if (message && result.data) {
+                  // Replace with server response
+                  message.reactions = result.data.reactions;
+                }
+              }
+            )
+          );
+        } catch (error) {
+          // Revert optimistic update on error
+          patchResult.undo();
+          throw error;
+        }
+      },
+      invalidatesTags: (result, error, { roomId }) => [
+        { type: "ChatMessage", id: roomId },
       ],
       transformResponse: (response: ApiResponse<ChatMessage>) => {
         if (response.success && response.data) {
@@ -225,14 +396,60 @@ export const chatApi = createApi({
 
     removeReaction: builder.mutation<
       ChatMessage,
-      { messageId: string; reactionId: string }
+      { messageId: string; reactionId: string; roomId: string }
     >({
       query: ({ messageId, reactionId }) => ({
         url: `messages/${messageId}/reactions/${reactionId}`,
         method: "DELETE",
       }),
-      invalidatesTags: (result, error, { messageId }) => [
-        { type: "ChatMessage", id: messageId },
+      // Use optimistic updates for reaction removal
+      onQueryStarted: async (
+        { messageId, reactionId, roomId },
+        { dispatch, queryFulfilled }
+      ) => {
+        const patchResult = dispatch(
+          chatApi.util.updateQueryData(
+            "getRoomMessages",
+            { roomId, page: 1, limit: 50 },
+            (draft) => {
+              const message = draft.messages.find(
+                (msg) => msg._id === messageId
+              );
+              if (message) {
+                // Remove reaction optimistically
+                message.reactions = message.reactions.filter(
+                  (reaction) => reaction._id !== reactionId
+                );
+              }
+            }
+          )
+        );
+
+        try {
+          const result = await queryFulfilled;
+          // Update with real data from server
+          dispatch(
+            chatApi.util.updateQueryData(
+              "getRoomMessages",
+              { roomId, page: 1, limit: 50 },
+              (draft) => {
+                const message = draft.messages.find(
+                  (msg) => msg._id === messageId
+                );
+                if (message && result.data) {
+                  message.reactions = result.data.reactions;
+                }
+              }
+            )
+          );
+        } catch (error) {
+          // Revert optimistic update on error
+          patchResult.undo();
+          throw error;
+        }
+      },
+      invalidatesTags: (result, error, { roomId }) => [
+        { type: "ChatMessage", id: roomId },
       ],
       transformResponse: (response: ApiResponse<ChatMessage>) => {
         if (response.success && response.data) {
@@ -389,6 +606,8 @@ export const {
   useArchiveRoomMutation,
   useGetRoomMessagesQuery,
   useSendMessageMutation,
+  useEditMessageMutation,
+  useDeleteMessageMutation,
   useAddReactionMutation,
   useRemoveReactionMutation,
   useInviteToRoomMutation,

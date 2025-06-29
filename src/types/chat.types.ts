@@ -96,6 +96,7 @@ export interface ChatMessage {
   attachments?: MessageAttachment[];
   reactions: MessageReaction[];
   replyTo?: string | ChatMessage; // Can be either ID string or populated message object
+  isEdited?: boolean;
   editedAt?: Date;
   deletedAt?: Date;
   createdAt: Date;
@@ -115,7 +116,7 @@ export interface ChatRoom {
   isArchived: boolean;
   archivedAt?: Date;
   lastMessage?: ChatMessage;
-  lastActivity: Date;
+  lastActivity: Date | string; // Date from server, string in Redux for serialization
   settings: {
     allowFileUploads: boolean;
     maxFileSize: number;

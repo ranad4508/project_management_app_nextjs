@@ -1,46 +1,54 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { TaskService } from "@/src/services/task.service"
-import { validateSchema, schemas } from "@/src/middleware/validation.middleware"
-import { requireAuth } from "@/src/middleware/auth.middleware"
-import { asyncHandler } from "@/src/errors/errorHandler"
-import type { ApiResponse } from "@/src/types/api.types"
+import { type NextRequest, NextResponse } from "next/server";
+import { TaskService } from "@/src/services/task.service";
+import {
+  validateSchema,
+  schemas,
+} from "@/src/middleware/validation.middleware";
+import { requireAuth } from "@/src/middleware/auth.middleware";
+import { asyncHandler } from "@/src/errors/errorHandler";
+import type { ApiResponse } from "@/src/types/api.types";
 
 export class TaskController {
-  private taskService: TaskService
+  private taskService: TaskService;
 
   constructor() {
-    this.taskService = new TaskService()
+    this.taskService = new TaskService();
   }
 
-  createTask = asyncHandler(async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-    const user = await requireAuth(req)
-    const body = await req.json()
-    const validatedData = validateSchema(schemas.createTask, body)
+  createTask = asyncHandler(
+    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const body = await req.json();
+      const validatedData = validateSchema(schemas.createTask, body);
 
-    const task = await this.taskService.createTask(user.id, validatedData)
+      const task = await this.taskService.createTask(user.id, validatedData);
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: task,
-        message: "Task created successfully",
-      },
-      { status: 201 },
-    )
-  })
+      return NextResponse.json(
+        {
+          success: true,
+          data: task,
+          message: "Task created successfully",
+        },
+        { status: 201 }
+      );
+    }
+  );
 
   getProjectTasks = asyncHandler(
-    async (req: NextRequest, { params }: { params: { projectId: string } }): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req)
-      const { projectId } = params
-      const { searchParams } = new URL(req.url)
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ projectId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { projectId } = await params;
+      const { searchParams } = new URL(req.url);
 
       const pagination = {
         page: Number.parseInt(searchParams.get("page") || "1"),
         limit: Number.parseInt(searchParams.get("limit") || "20"),
         sortBy: searchParams.get("sortBy") || "createdAt",
         sortOrder: (searchParams.get("sortOrder") || "desc") as "asc" | "desc",
-      }
+      };
 
       const filters = {
         search: searchParams.get("search") || undefined,
@@ -49,66 +57,83 @@ export class TaskController {
         assignedTo: searchParams.get("assignedTo") || undefined,
         dateFrom: searchParams.get("dateFrom") || undefined,
         dateTo: searchParams.get("dateTo") || undefined,
-      }
+      };
 
-      const result = await this.taskService.getProjectTasks(projectId, user.id, pagination, filters)
+      const result = await this.taskService.getProjectTasks(
+        projectId,
+        user.id,
+        pagination,
+        filters
+      );
 
       return NextResponse.json({
         success: true,
         data: result,
-      })
-    },
-  )
+      });
+    }
+  );
 
   getTaskById = asyncHandler(
-    async (req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req)
-      const { id } = params
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
 
-      const task = await this.taskService.getTaskById(id, user.id)
+      const task = await this.taskService.getTaskById(id, user.id);
 
       return NextResponse.json({
         success: true,
         data: task,
-      })
-    },
-  )
+      });
+    }
+  );
 
   updateTask = asyncHandler(
-    async (req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req)
-      const { id } = params
-      const body = await req.json()
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
+      const body = await req.json();
 
-      const task = await this.taskService.updateTask(id, user.id, body)
+      const task = await this.taskService.updateTask(id, user.id, body);
 
       return NextResponse.json({
         success: true,
         data: task,
         message: "Task updated successfully",
-      })
-    },
-  )
+      });
+    }
+  );
 
   deleteTask = asyncHandler(
-    async (req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req)
-      const { id } = params
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
 
-      const result = await this.taskService.deleteTask(id, user.id)
+      const result = await this.taskService.deleteTask(id, user.id);
 
       return NextResponse.json({
         success: true,
         message: result.message,
-      })
-    },
-  )
+      });
+    }
+  );
 
   addComment = asyncHandler(
-    async (req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req)
-      const { id } = params
-      const { content } = await req.json()
+    async (
+      req: NextRequest,
+      { params }: { params: { id: string } }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = params;
+      const { content } = await req.json();
 
       if (!content || content.trim().length === 0) {
         return NextResponse.json(
@@ -116,54 +141,66 @@ export class TaskController {
             success: false,
             error: "Comment content is required",
           },
-          { status: 400 },
-        )
+          { status: 400 }
+        );
       }
 
-      const comment = await this.taskService.addComment(id, user.id, content.trim())
+      const comment = await this.taskService.addComment(
+        id,
+        user.id,
+        content.trim()
+      );
 
       return NextResponse.json({
         success: true,
         data: comment,
         message: "Comment added successfully",
-      })
-    },
-  )
-
-  getUserTasks = asyncHandler(async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-    const user = await requireAuth(req)
-    const { searchParams } = new URL(req.url)
-
-    const pagination = {
-      page: Number.parseInt(searchParams.get("page") || "1"),
-      limit: Number.parseInt(searchParams.get("limit") || "20"),
-      sortBy: searchParams.get("sortBy") || "dueDate",
-      sortOrder: (searchParams.get("sortOrder") || "asc") as "asc" | "desc",
+      });
     }
+  );
 
-    const filters = {
-      status: searchParams.get("status") || undefined,
-      priority: searchParams.get("priority") || undefined,
-      dateFrom: searchParams.get("dateFrom") || undefined,
-      dateTo: searchParams.get("dateTo") || undefined,
+  getUserTasks = asyncHandler(
+    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { searchParams } = new URL(req.url);
+
+      const pagination = {
+        page: Number.parseInt(searchParams.get("page") || "1"),
+        limit: Number.parseInt(searchParams.get("limit") || "20"),
+        sortBy: searchParams.get("sortBy") || "dueDate",
+        sortOrder: (searchParams.get("sortOrder") || "asc") as "asc" | "desc",
+      };
+
+      const filters = {
+        status: searchParams.get("status") || undefined,
+        priority: searchParams.get("priority") || undefined,
+        dateFrom: searchParams.get("dateFrom") || undefined,
+        dateTo: searchParams.get("dateTo") || undefined,
+      };
+
+      const result = await this.taskService.getUserTasks(
+        user.id,
+        pagination,
+        filters
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+      });
     }
+  );
 
-    const result = await this.taskService.getUserTasks(user.id, pagination, filters)
+  getOverdueTasks = asyncHandler(
+    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
 
-    return NextResponse.json({
-      success: true,
-      data: result,
-    })
-  })
+      const tasks = await this.taskService.getOverdueTasks(user.id);
 
-  getOverdueTasks = asyncHandler(async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
-    const user = await requireAuth(req)
-
-    const tasks = await this.taskService.getOverdueTasks(user.id)
-
-    return NextResponse.json({
-      success: true,
-      data: tasks,
-    })
-  })
+      return NextResponse.json({
+        success: true,
+        data: tasks,
+      });
+    }
+  );
 }

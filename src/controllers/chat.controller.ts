@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { ChatService } from "@/src/services/chat.service";
+import { KeyManagementService } from "@/src/services/key-management.service";
 import { requireAuth } from "@/src/middleware/auth.middleware";
 import { asyncHandler } from "@/src/errors/errorHandler";
 import type { ApiResponse } from "@/src/types/api.types";
@@ -309,6 +310,54 @@ export class ChatController {
         },
         { status: 201 }
       );
+    }
+  );
+
+  editMessage = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ messageId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { messageId } = params;
+      const { content } = await req.json();
+
+      const message = await this.chatService.editMessage(
+        messageId,
+        user.id,
+        content
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: message,
+        message: "Message edited successfully",
+      });
+    }
+  );
+
+  deleteMessage = asyncHandler(
+    async (
+      req: NextRequest,
+      context: { params: Promise<{ messageId: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const params = await context.params;
+      const { messageId } = params;
+      const { deleteType = "delete_for_me" } = await req.json();
+
+      await this.chatService.deleteMessage(messageId, user.id, deleteType);
+
+      const message =
+        deleteType === "unsend_for_everyone"
+          ? "Message unsent for everyone"
+          : "Message deleted from your view";
+
+      return NextResponse.json({
+        success: true,
+        message,
+      });
     }
   );
 

@@ -905,6 +905,157 @@ export class ChatService {
   }
 
   /**
+   * Edit a message
+   */
+  async editMessage(
+    messageId: string,
+    userId: string,
+    newContent: string
+  ): Promise<ChatMessageType> {
+    const message = await ChatMessage.findById(messageId)
+      .populate("sender", "name email")
+      .populate("room");
+
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    // Check if user is the sender
+    if (message.sender._id.toString() !== userId) {
+      throw new Error("You can only edit your own messages");
+    }
+
+    const room = message.room as any;
+
+    console.log(`🔧 [CHAT-SERVICE] Updating message ${messageId}:`, {
+      oldContent: message.content,
+      newContent: newContent,
+      isEncrypted: room.isEncrypted,
+      userId,
+    });
+
+    // Update the plain text content
+    message.content = newContent;
+    message.isEdited = true;
+    message.editedAt = new Date();
+
+    // Handle encryption if room is encrypted
+    if (room.isEncrypted && room.encryptionKeyId) {
+      try {
+        console.log(
+          `🔐 [CHAT-SERVICE] Re-encrypting edited message for encrypted room ${room.name}`
+        );
+
+        // Use the same consistent shared secret pattern as in sendMessage
+        const consistentSharedSecret = crypto
+          .createHash("sha256")
+          .update(
+            `${room.encryptionKeyId}-${room._id.toString()}-consistent-key`
+          )
+          .digest("hex");
+
+        console.log(
+          `🔑 [CHAT-SERVICE] Using consistent shared secret for re-encryption in room ${room.name}`
+        );
+
+        // Encrypt the new content using the same method as sendMessage
+        const encryptedContent = EncryptionService.encryptMessage(
+          newContent,
+          consistentSharedSecret,
+          room.encryptionKeyId,
+          userId,
+          room._id.toString(),
+          message._id.toString()
+        );
+
+        // Update encrypted content
+        message.encryptedContent = encryptedContent;
+
+        console.log(
+          `✅ [CHAT-SERVICE] Message re-encrypted successfully for room ${room.name}`
+        );
+      } catch (error) {
+        console.error(
+          `❌ [CHAT-SERVICE] Failed to re-encrypt edited message:`,
+          error
+        );
+        throw new Error("Failed to encrypt edited message");
+      }
+    }
+
+    const updatedMessage = await message.save();
+    await updatedMessage.populate([
+      { path: "sender", select: "name email avatar" },
+      { path: "replyTo", populate: { path: "sender", select: "name email" } },
+    ]);
+
+    console.log(`✅ [CHAT-SERVICE] Message ${messageId} edited successfully:`, {
+      content: updatedMessage.content,
+      isEdited: updatedMessage.isEdited,
+      editedAt: updatedMessage.editedAt,
+      hasEncryptedContent: !!updatedMessage.encryptedContent,
+    });
+
+    // Emit socket event to notify other users about the message edit
+    const io = (global as any).io;
+    if (io) {
+      io.to(room._id.toString()).emit(
+        "message:updated",
+        updatedMessage.toObject()
+      );
+      console.log(
+        `📡 [CHAT-SERVICE] Socket notification sent for edited message ${messageId}`
+      );
+    }
+
+    // Return as plain object to ensure proper serialization
+    return updatedMessage.toObject();
+  }
+
+  /**
+   * Delete a message
+   */
+  async deleteMessage(
+    messageId: string,
+    userId: string,
+    deleteType: "delete_for_me" | "unsend_for_everyone" = "delete_for_me"
+  ): Promise<void> {
+    const message = await ChatMessage.findById(messageId).populate(
+      "sender",
+      "name email"
+    );
+
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    // Check if user is the sender
+    if (message.sender._id.toString() !== userId) {
+      throw new Error("You can only delete your own messages");
+    }
+
+    if (deleteType === "unsend_for_everyone") {
+      // Completely delete the message for everyone
+      await ChatMessage.findByIdAndDelete(messageId);
+      console.log(
+        `🗑️ [CHAT-SERVICE] Message ${messageId} unsent for everyone by user ${userId}`
+      );
+    } else {
+      // Just hide the message for this user
+      if (!message.hiddenFrom) {
+        message.hiddenFrom = [];
+      }
+      if (!message.hiddenFrom.includes(userId as any)) {
+        message.hiddenFrom.push(userId as any);
+      }
+      await message.save();
+      console.log(
+        `👁️ [CHAT-SERVICE] Message ${messageId} hidden for user ${userId}`
+      );
+    }
+  }
+
+  /**
    * Get room messages with decryption
    */
   async getRoomMessages(
@@ -1052,8 +1203,27 @@ export class ChatService {
               // If key versioning fails, try a few essential fallback patterns
               if (!decrypted) {
                 const essentialFallbacks = [
+                  // Current encryption pattern used in sendMessage (MOST IMPORTANT)
+                  crypto
+                    .createHash("sha256")
+                    .update(`${room.encryptionKeyId}-${roomId}-consistent-key`)
+                    .digest("hex"),
                   // Current key pattern
                   room.encryptionKeyId,
+                  // Room-based shared secret (same for all users)
+                  crypto
+                    .createHash("sha256")
+                    .update(`room-${roomId}-shared-secret`)
+                    .digest("hex"),
+                  // Legacy key patterns for existing messages
+                  crypto
+                    .createHash("sha256")
+                    .update(`${roomId}-legacy-key-1`)
+                    .digest("hex"),
+                  crypto
+                    .createHash("sha256")
+                    .update(`${roomId}-legacy-key-2`)
+                    .digest("hex"),
                   // Room-based patterns
                   `${roomId}-${room.encryptionKeyId}`,
                   `${room.encryptionKeyId}-${roomId}`,
@@ -1101,12 +1271,14 @@ export class ChatService {
                 console.error(
                   `❌ Failed to decrypt message ${messageObj._id} with all available keys`
                 );
-                messageObj.content = "[Encrypted message - unable to decrypt]";
+                // For now, show a user-friendly message and suggest regenerating keys
+                messageObj.content =
+                  "🔒 [Message encrypted with old keys - Admin can regenerate keys to fix this]";
               }
             }
           } catch (error) {
             console.error("❌ Failed to decrypt message:", error);
-            messageObj.content = "[Encrypted message - decryption failed]";
+            messageObj.content = "🔒 [Encrypted message - decryption failed]";
           }
         }
 
@@ -1115,7 +1287,7 @@ export class ChatService {
     );
 
     return {
-      messages: decryptedMessages.reverse(),
+      messages: decryptedMessages.reverse(), // Reverse to show oldest first in the UI
       total,
     };
   }

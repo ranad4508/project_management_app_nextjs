@@ -23,7 +23,6 @@ interface ChatWindowProps {
 
 export function ChatWindow({ roomId }: ChatWindowProps) {
   const { joinRoom, leaveRoom } = useSocket();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -69,6 +68,7 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
       );
       console.log(`📊 [CHAT-WINDOW] Pagination info:`, messagesData.pagination);
 
+      // Keep messages in newest-first order (as returned from database)
       dispatch(setMessages({ roomId, messages: messagesData.messages }));
       setHasMore(
         messagesData.pagination.page < messagesData.pagination.totalPages
@@ -100,8 +100,10 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
           `📥 [CHAT-WINDOW] Loaded ${data.data.messages.length} more messages`
         );
 
+        // Reverse older messages to maintain chronological order (oldest first)
+        const orderedOlderMessages = [...data.data.messages].reverse();
         // Prepend older messages
-        dispatch(appendMessages({ roomId, messages: data.data.messages }));
+        dispatch(appendMessages({ roomId, messages: orderedOlderMessages }));
         setPage((prev) => prev + 1);
         setHasMore(data.data.pagination.page < data.data.pagination.totalPages);
       } else {
@@ -115,12 +117,50 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
     }
   };
 
-  // Auto-scroll to bottom when new messages arrive (only for initial load)
+  // Auto-scroll to top when messages load (since newest messages are first)
   useEffect(() => {
-    if (page === 1 && messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      // Use multiple timeouts to ensure scroll happens after DOM updates
+      const scrollToTop = () => {
+        // Scroll to top to show newest messages
+        const scrollArea = document.querySelector(
+          "[data-radix-scroll-area-viewport]"
+        );
+        if (scrollArea) {
+          scrollArea.scrollTo({
+            top: 0,
+            behavior: page === 1 ? "instant" : "smooth",
+          });
+        }
+      };
+
+      // Try multiple times to ensure it works
+      setTimeout(scrollToTop, 50);
+      setTimeout(scrollToTop, 150);
+      setTimeout(scrollToTop, 300);
     }
-  }, [messages, page]);
+  }, [messages.length, page]);
+
+  // Scroll to top when room changes (to show latest messages)
+  useEffect(() => {
+    if (messages.length > 0) {
+      const scrollToTop = () => {
+        const scrollArea = document.querySelector(
+          "[data-radix-scroll-area-viewport]"
+        );
+        if (scrollArea) {
+          scrollArea.scrollTo({
+            top: 0,
+            behavior: "instant",
+          });
+        }
+      };
+
+      setTimeout(scrollToTop, 100);
+      setTimeout(scrollToTop, 300);
+      setTimeout(scrollToTop, 500);
+    }
+  }, [roomId]);
 
   if (!activeRoom) {
     return (
@@ -143,6 +183,7 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
         <div className="flex-1 overflow-hidden">
           <MessageList
             messages={messages}
+            roomId={activeRoom._id}
             isLoading={isInitialLoading || isLoadingMore}
             error={error}
             hasMore={hasMore}
@@ -158,8 +199,6 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
           </div>
         </div>
       </div>
-
-      <div ref={messagesEndRef} />
     </div>
   );
 }

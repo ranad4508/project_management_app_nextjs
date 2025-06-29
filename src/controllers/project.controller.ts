@@ -40,10 +40,10 @@ export class ProjectController {
   getWorkspaceProjects = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { workspaceId: string } }
+      { params }: { params: Promise<{ workspaceId: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
-      const { workspaceId } = params;
+      const { workspaceId } = await params;
       const { searchParams } = new URL(req.url);
 
       const pagination = {
@@ -76,10 +76,10 @@ export class ProjectController {
   getProjectById = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      { params }: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
-      const { id } = params;
+      const { id } = await params;
 
       const project = await this.projectService.getProjectById(id, user.id);
 
@@ -93,10 +93,10 @@ export class ProjectController {
   updateProject = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      { params }: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
-      const { id } = params;
+      const { id } = await params;
       const body = await req.json();
 
       const project = await this.projectService.updateProject(
@@ -116,10 +116,10 @@ export class ProjectController {
   deleteProject = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      { params }: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
-      const { id } = params;
+      const { id } = await params;
 
       const result = await this.projectService.deleteProject(id, user.id);
 
@@ -157,10 +157,10 @@ export class ProjectController {
   archiveProject = asyncHandler(
     async (
       req: NextRequest,
-      { params }: { params: { id: string } }
+      { params }: { params: Promise<{ id: string }> }
     ): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
-      const { id } = params;
+      const { id } = await params;
 
       const project = await this.projectService.archiveProject(id, user.id);
 

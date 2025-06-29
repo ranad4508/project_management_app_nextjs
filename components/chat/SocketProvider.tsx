@@ -130,17 +130,23 @@ export function SocketProvider({ children, workspaceId }: SocketProviderProps) {
         // Use user ID for authentication instead of token
         const userId = session.user.id;
 
-        // Initialize socket connection
+        // Initialize socket connection with enhanced file upload support
         const socket = io(window.location.origin, {
           path: "/api/socket/io",
           transports: ["websocket", "polling"],
-          timeout: 20000,
+          timeout: 30000, // Increased timeout for large files
           forceNew: true,
           autoConnect: true,
           auth: {
             userId: userId, // Use userId instead of token
             workspaceId: workspaceId,
           },
+          // Enhanced settings for large file uploads
+          upgrade: true,
+          rememberUpgrade: true,
+          maxHttpBufferSize: 100 * 1024 * 1024, // 100MB to match server
+          pingTimeout: 60000, // 60 seconds
+          pingInterval: 25000, // 25 seconds
         });
 
         socketRef.current = socket;

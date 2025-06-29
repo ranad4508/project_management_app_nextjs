@@ -1,21 +1,24 @@
 "use client";
 
-import { useSelector } from "react-redux";
-import { Button } from "@/components/ui/button";
+import { useSession } from "next-auth/react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useSocket } from "./SocketProvider";
+import {
+  useAddReactionMutation,
+  useRemoveReactionMutation,
+} from "@/src/store/api/chatApi";
 import { cn } from "@/lib/utils";
 import type { MessageReaction } from "@/src/types/chat.types";
-import type { RootState } from "@/src/store";
+import { toast } from "sonner";
 
 interface MessageReactionsProps {
   reactions: MessageReaction[];
   messageId: string;
+  roomId: string;
 }
 
 const reactionEmojis: Record<string, string> = {
@@ -36,9 +39,12 @@ const reactionEmojis: Record<string, string> = {
 export function MessageReactions({
   reactions,
   messageId,
+  roomId,
 }: MessageReactionsProps) {
-  const { addReaction, removeReaction } = useSocket();
-  const currentUser = useSelector((state: RootState) => state.auth.user);
+  const { data: session } = useSession();
+  const currentUser = session?.user;
+  const [addReactionMutation] = useAddReactionMutation();
+  const [removeReactionMutation] = useRemoveReactionMutation();
 
   // Filter out null/undefined reactions and reactions with null users
   const validReactions =
@@ -61,7 +67,7 @@ export function MessageReactions({
     return acc;
   }, {} as Record<string, MessageReaction[]>);
 
-  const handleReactionClick = (type: string) => {
+  const handleReactionClick = async (type: string) => {
     if (!currentUser?.id) {
       console.warn("No current user found");
       return;
@@ -71,10 +77,27 @@ export function MessageReactions({
       (r) => r.user && r.user._id === currentUser.id
     );
 
-    if (userReaction && userReaction._id) {
-      removeReaction(messageId, userReaction._id);
-    } else {
-      addReaction(messageId, type);
+    try {
+      if (userReaction && userReaction._id) {
+        // Remove existing reaction
+        await removeReactionMutation({
+          messageId,
+          reactionId: userReaction._id,
+          roomId,
+        }).unwrap();
+        toast.success("Reaction removed!");
+      } else {
+        // Add new reaction
+        await addReactionMutation({
+          messageId,
+          type: type as any, // Cast to ReactionType
+          roomId,
+        }).unwrap();
+        toast.success("Reaction added!");
+      }
+    } catch (error) {
+      console.error("Failed to update reaction:", error);
+      toast.error("Failed to update reaction. Please try again.");
     }
   };
 
@@ -84,7 +107,7 @@ export function MessageReactions({
   }
 
   return (
-    <div className="flex flex-wrap gap-1 mt-2 mb-1 max-w-full">
+    <div className="flex gap-1 items-center">
       {Object.entries(groupedReactions).map(([type, reactionList]) => {
         // Filter out any reactions with null users in this specific group
         const validReactionList = reactionList.filter(
@@ -120,32 +143,31 @@ export function MessageReactions({
           <TooltipProvider key={type}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
                   className={cn(
-                    "h-6 px-2 text-xs rounded-full border transition-all duration-200 hover:scale-105 shadow-sm",
-                    "min-w-[2rem] max-w-[6rem] flex-shrink-0", // Responsive sizing
+                    "min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center gap-0.5 transition-all duration-200 hover:scale-110 shadow-sm",
                     hasUserReacted
-                      ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-400"
-                      : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700"
+                      ? "bg-blue-500 text-white hover:bg-blue-600"
+                      : "bg-white border border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600"
                   )}
                   onClick={() => handleReactionClick(type)}
                 >
-                  <span className="text-sm mr-1 flex-shrink-0">
+                  <span className="text-xs leading-none">
                     {reactionEmojis[type] || "👍"}
                   </span>
-                  <span
-                    className={cn(
-                      "font-medium text-xs truncate",
-                      hasUserReacted
-                        ? "text-blue-700 dark:text-blue-400"
-                        : "text-gray-600 dark:text-gray-400"
-                    )}
-                  >
-                    {validReactionList.length}
-                  </span>
-                </Button>
+                  {validReactionList.length > 1 && (
+                    <span
+                      className={cn(
+                        "text-xs font-medium leading-none",
+                        hasUserReacted
+                          ? "text-white"
+                          : "text-gray-600 dark:text-gray-300"
+                      )}
+                    >
+                      {validReactionList.length}
+                    </span>
+                  )}
+                </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <p className="text-xs">{tooltipText}</p>

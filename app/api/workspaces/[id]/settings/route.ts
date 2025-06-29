@@ -6,7 +6,7 @@ const workspaceController = new WorkspaceController();
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await Database.connect();
   return workspaceController.getWorkspaceSettings(req as any, { params });
@@ -14,7 +14,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await Database.connect();
   return workspaceController.updateWorkspaceSettings(req as any, { params });

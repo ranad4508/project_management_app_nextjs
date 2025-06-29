@@ -320,6 +320,24 @@ export class WorkspaceService {
       throw new NotFoundError("Workspace not found or access denied");
     }
 
+    // Clean up members with null user references
+    const validMembers = workspace.members.filter((m) => m.user);
+    const invalidMembers = workspace.members.filter((m) => !m.user);
+
+    if (invalidMembers.length > 0) {
+      console.warn(
+        `⚠️ [WORKSPACE-SERVICE] Found ${invalidMembers.length} members with null user references in workspace ${workspaceId}. Cleaning up...`
+      );
+
+      // Update the workspace to remove invalid members
+      workspace.members = validMembers;
+      await workspace.save();
+
+      console.log(
+        `✅ [WORKSPACE-SERVICE] Cleaned up ${invalidMembers.length} invalid members from workspace ${workspaceId}`
+      );
+    }
+
     // Get workspace statistics
     const stats = await this.getWorkspaceStats(workspaceId);
 
@@ -582,8 +600,26 @@ export class WorkspaceService {
       expiresAt: { $gt: new Date() },
     }).populate("invitedBy", "name email");
 
+    // Clean up members with null user references
+    const validMembers = workspace.members.filter((m) => m.user);
+    const invalidMembers = workspace.members.filter((m) => !m.user);
+
+    if (invalidMembers.length > 0) {
+      console.warn(
+        `⚠️ [WORKSPACE-SERVICE] Found ${invalidMembers.length} members with null user references in workspace ${workspaceId}. Cleaning up...`
+      );
+
+      // Update the workspace to remove invalid members
+      workspace.members = validMembers;
+      await workspace.save();
+
+      console.log(
+        `✅ [WORKSPACE-SERVICE] Cleaned up ${invalidMembers.length} invalid members from workspace ${workspaceId}`
+      );
+    }
+
     return {
-      members: workspace.members,
+      members: validMembers,
       owner: workspace.owner,
       pendingInvitations,
     };

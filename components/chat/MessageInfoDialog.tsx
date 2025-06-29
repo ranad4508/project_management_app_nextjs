@@ -20,6 +20,7 @@ interface MessageInfoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   message: ChatMessage;
+  roomId: string;
 }
 
 const isPopulatedReplyTo = (replyTo: any): replyTo is ChatMessage => {
@@ -32,6 +33,7 @@ export function MessageInfoDialog({
   open,
   onOpenChange,
   message,
+  roomId,
 }: MessageInfoDialogProps) {
   const formatDateTime = (date: Date | string) => {
     const dateObj = typeof date === "string" ? new Date(date) : date;
@@ -54,7 +56,7 @@ export function MessageInfoDialog({
         </DialogHeader>
 
         <ScrollArea className="max-h-[70vh]">
-          <div className="space-y-6">
+          <div className="space-y-6 mr-4">
             {/* Sender Information */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -216,6 +218,7 @@ export function MessageInfoDialog({
                   <MessageReactions
                     reactions={message.reactions}
                     messageId={message._id}
+                    roomId={roomId}
                   />
                 </div>
               </>

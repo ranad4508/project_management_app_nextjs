@@ -9,6 +9,7 @@ import type { ChatMessage } from "@/src/types/chat.types";
 
 interface MessageListProps {
   messages: ChatMessage[];
+  roomId: string;
   isLoading: boolean;
   error: any;
   hasMore: boolean;
@@ -17,6 +18,7 @@ interface MessageListProps {
 
 export function MessageList({
   messages,
+  roomId,
   isLoading,
   error,
   hasMore,
@@ -83,6 +85,7 @@ export function MessageList({
               key={message._id}
               message={message}
               showAvatar={showAvatar}
+              roomId={roomId}
             />
           );
         })}

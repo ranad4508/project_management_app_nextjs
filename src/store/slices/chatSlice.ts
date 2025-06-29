@@ -130,7 +130,9 @@ const chatSlice = createSlice({
       const roomIndex = state.rooms.findIndex((room) => room._id === roomId);
       if (roomIndex >= 0) {
         state.rooms[roomIndex].lastMessage = message;
-        state.rooms[roomIndex].lastActivity = new Date(message.createdAt);
+        state.rooms[roomIndex].lastActivity = new Date(
+          message.createdAt
+        ).toISOString();
       }
     },
 

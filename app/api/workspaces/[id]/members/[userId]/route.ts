@@ -1,7 +1,7 @@
-import { WorkspaceController } from "@/src/controllers/workspace.controller"
-import Database from "@/src/config/database"
+import { WorkspaceController } from "@/src/controllers/workspace.controller";
+import Database from "@/src/config/database";
 
-const workspaceController = new WorkspaceController()
+const workspaceController = new WorkspaceController();
 
 // Update a member's role
 // export async function PUT(req: NextRequest, { params }: { params: { id: string; userId: string } }) {
@@ -60,9 +60,12 @@ const workspaceController = new WorkspaceController()
 //   }
 // }
 
-export async function PUT(req: Request, { params }: { params: { id: string; userId: string } }) {
-  await Database.connect()
-  return workspaceController.updateMemberRole(req as any, { params })
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ id: string; userId: string }> }
+) {
+  await Database.connect();
+  return workspaceController.updateMemberRole(req as any, { params });
 }
 
 // Remove a member from the workspace
@@ -117,7 +120,10 @@ export async function PUT(req: Request, { params }: { params: { id: string; user
 //   }
 // }
 
-export async function DELETE(req: Request, { params }: { params: { id: string; userId: string } }) {
-  await Database.connect()
-  return workspaceController.removeMember(req as any, { params })
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string; userId: string } }
+) {
+  await Database.connect();
+  return workspaceController.removeMember(req as any, { params });
 }

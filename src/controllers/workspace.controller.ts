@@ -70,6 +70,27 @@ export class WorkspaceController {
       const params = await context.params;
       const { id } = params;
 
+      // Debug logging and validation
+      console.log("🔍 [WORKSPACE-CONTROLLER] Received params:", params);
+      console.log(
+        "🔍 [WORKSPACE-CONTROLLER] Extracted ID:",
+        id,
+        "Type:",
+        typeof id
+      );
+
+      // Validate the ID
+      if (!id || typeof id !== "string" || id === "[object Object]") {
+        console.error("❌ [WORKSPACE-CONTROLLER] Invalid workspace ID:", id);
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid workspace ID provided",
+          },
+          { status: 400 }
+        );
+      }
+
       const workspace = await this.workspaceService.getWorkspaceById(
         id,
         user.id

@@ -8,7 +8,7 @@ const chatController = new ChatController();
 export const GET = asyncHandler(
   async (
     req: NextRequest,
-    { params }: { params: { workspaceId: string } }
+    { params }: { params: Promise<{ workspaceId: string }> }
   ): Promise<NextResponse> => {
     await Database.connect();
     return chatController.getWorkspaceChatRooms(req, { params });
@@ -18,7 +18,7 @@ export const GET = asyncHandler(
 export const POST = asyncHandler(
   async (
     req: NextRequest,
-    { params }: { params: { workspaceId: string } }
+    { params }: { params: Promise<{ workspaceId: string }> }
   ): Promise<NextResponse> => {
     await Database.connect();
     return chatController.createChatRoom(req);

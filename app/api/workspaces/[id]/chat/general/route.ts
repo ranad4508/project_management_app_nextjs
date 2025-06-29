@@ -8,7 +8,7 @@ const chatController = new ChatController();
 export const POST = asyncHandler(
   async (
     req: NextRequest,
-    { params }: { params: { workspaceId: string } }
+    { params }: { params: Promise<{ workspaceId: string }> }
   ): Promise<NextResponse> => {
     await Database.connect();
     return chatController.ensureWorkspaceGeneralRoom(req, { params });
