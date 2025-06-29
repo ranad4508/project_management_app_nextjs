@@ -147,6 +147,40 @@ export default function ProjectPage() {
     return File;
   };
 
+  // Helper function to get file extension from MIME type
+  const getFileExtensionFromMimeType = (mimeType: string): string | null => {
+    const mimeToExt: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/jpg": "jpg",
+      "image/png": "png",
+      "image/gif": "gif",
+      "image/webp": "webp",
+      "image/svg+xml": "svg",
+      "application/pdf": "pdf",
+      "text/plain": "txt",
+      "application/msword": "doc",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        "docx",
+      "application/vnd.ms-excel": "xls",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        "xlsx",
+      "application/vnd.ms-powerpoint": "ppt",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+        "pptx",
+      "application/zip": "zip",
+      "application/x-rar-compressed": "rar",
+      "application/x-7z-compressed": "7z",
+      "video/mp4": "mp4",
+      "video/avi": "avi",
+      "video/mov": "mov",
+      "audio/mp3": "mp3",
+      "audio/wav": "wav",
+      "audio/mpeg": "mp3",
+    };
+
+    return mimeToExt[mimeType] || null;
+  };
+
   if (error) {
     toast({
       title: "Error",
@@ -498,27 +532,94 @@ export default function ProjectPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
+                                onClick={async () => {
                                   try {
-                                    // Use the download parameter to force download
-                                    const downloadUrl = `${
-                                      attachment.url
-                                    }?download=true&name=${encodeURIComponent(
-                                      attachment.filename
-                                    )}`;
+                                    // Get the original filename with proper extension
+                                    let filename =
+                                      attachment.filename || "download";
 
-                                    // Create a temporary link to trigger download
+                                    // Ensure the filename has the correct extension based on MIME type
+                                    if (
+                                      !filename.includes(".") &&
+                                      attachment.mimetype
+                                    ) {
+                                      const extension =
+                                        getFileExtensionFromMimeType(
+                                          attachment.mimetype
+                                        );
+                                      if (extension) {
+                                        filename += `.${extension}`;
+                                      }
+                                    }
+
+                                    // Fetch the file as blob with proper headers to ensure correct content type
+                                    const response = await fetch(
+                                      attachment.url,
+                                      {
+                                        headers: {
+                                          Accept:
+                                            attachment.mimetype ||
+                                            "application/octet-stream",
+                                        },
+                                      }
+                                    );
+
+                                    if (!response.ok) {
+                                      throw new Error(
+                                        `HTTP error! status: ${response.status}`
+                                      );
+                                    }
+
+                                    // Get the blob with the correct MIME type
+                                    const blob = await response.blob();
+
+                                    // Create a new blob with the correct MIME type if it's different
+                                    const correctBlob = new Blob([blob], {
+                                      type:
+                                        attachment.mimetype ||
+                                        blob.type ||
+                                        "application/octet-stream",
+                                    });
+
+                                    const url =
+                                      window.URL.createObjectURL(correctBlob);
+
+                                    // Create download link
                                     const link = document.createElement("a");
-                                    link.href = downloadUrl;
-                                    link.download = attachment.filename;
+                                    link.href = url;
+                                    link.download = filename;
                                     link.style.display = "none";
                                     document.body.appendChild(link);
                                     link.click();
                                     document.body.removeChild(link);
+
+                                    // Clean up the blob URL
+                                    window.URL.revokeObjectURL(url);
                                   } catch (error) {
                                     console.error("Download failed:", error);
-                                    // Fallback to opening in new tab
-                                    window.open(attachment.url, "_blank");
+                                    // Fallback: try direct download with proper headers
+                                    try {
+                                      const filename =
+                                        attachment.filename || "download";
+                                      const link = document.createElement("a");
+                                      link.href = `${
+                                        attachment.url
+                                      }?download=true&name=${encodeURIComponent(
+                                        filename
+                                      )}`;
+                                      link.download = filename;
+                                      link.target = "_blank";
+                                      link.style.display = "none";
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                    } catch (fallbackError) {
+                                      console.error(
+                                        "Fallback download also failed:",
+                                        fallbackError
+                                      );
+                                      window.open(attachment.url, "_blank");
+                                    }
                                   }
                                 }}
                               >

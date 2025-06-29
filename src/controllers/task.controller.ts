@@ -259,6 +259,7 @@ export class TaskController {
       };
 
       const filters = {
+        search: searchParams.get("search") || undefined,
         status: searchParams.get("status") || undefined,
         priority: searchParams.get("priority") || undefined,
         dateFrom: searchParams.get("dateFrom") || undefined,

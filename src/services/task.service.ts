@@ -528,17 +528,28 @@ export class TaskService {
       sortBy = "dueDate",
       sortOrder = "asc",
     } = pagination;
-    const { status, priority, dateFrom, dateTo } = filters;
+    const { status, priority, dateFrom, dateTo, search } = filters;
 
     const skip = (page - 1) * limit;
     const sort: Record<string, 1 | -1> = {
       [sortBy]: sortOrder === "asc" ? 1 : -1,
     };
 
-    // Build query
+    // Build query - only tasks assigned to the user
     const query: any = {
-      $or: [{ assignedTo: userId }, { createdBy: userId }],
+      assignedTo: userId,
     };
+
+    if (search) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { title: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+          { tags: { $in: [new RegExp(search, "i")] } },
+        ],
+      });
+    }
 
     if (status) {
       query.status = status;
@@ -555,7 +566,14 @@ export class TaskService {
     }
 
     const tasks = await Task.find(query)
-      .populate("project", "name slug workspace")
+      .populate({
+        path: "project",
+        select: "name slug workspace",
+        populate: {
+          path: "workspace",
+          select: "name",
+        },
+      })
       .populate("assignedTo", "name email avatar")
       .populate("createdBy", "name email avatar")
       .sort(sort)

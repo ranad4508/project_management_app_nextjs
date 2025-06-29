@@ -15,7 +15,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Upload, Paperclip, Trash2 } from "lucide-react";
+import {
+  Upload,
+  Paperclip,
+  Trash2,
+  Download,
+  FileText,
+  Image,
+  Video,
+  Music,
+  Archive,
+  File,
+} from "lucide-react";
 import {
   useGetTaskAttachmentsQuery,
   useAddTaskAttachmentMutation,
@@ -23,7 +34,6 @@ import {
 } from "@/src/store/api/taskApi";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { FileViewer } from "../FileViewer";
 
 interface TaskAttachmentsProps {
   taskId: string;
@@ -35,6 +45,49 @@ const formatFileSize = (bytes: number) => {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
+const getFileIcon = (mimetype?: string) => {
+  if (!mimetype) return File;
+  if (mimetype.startsWith("image/")) return Image;
+  if (mimetype.startsWith("video/")) return Video;
+  if (mimetype.startsWith("audio/")) return Music;
+  if (mimetype.includes("pdf") || mimetype.includes("document"))
+    return FileText;
+  if (mimetype.includes("zip") || mimetype.includes("rar")) return Archive;
+  return File;
+};
+
+const getFileExtension = (mimeType: string): string | null => {
+  const mimeToExt: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "application/pdf": "pdf",
+    "text/plain": "txt",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      "pptx",
+    "application/zip": "zip",
+    "application/x-rar-compressed": "rar",
+    "application/x-7z-compressed": "7z",
+    "video/mp4": "mp4",
+    "video/avi": "avi",
+    "video/mov": "mov",
+    "audio/mp3": "mp3",
+    "audio/wav": "wav",
+    "audio/mpeg": "mp3",
+  };
+
+  return mimeToExt[mimeType] || null;
 };
 
 export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
@@ -116,6 +169,80 @@ export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
     } catch (error) {
       toast.error("Failed to delete attachment");
       console.error("Failed to delete attachment:", error);
+    }
+  };
+
+  const handleDownload = async (attachment: any) => {
+    if (!attachment.url) {
+      console.error("File URL is not available");
+      return;
+    }
+
+    try {
+      // Get the original filename with proper extension
+      let filename =
+        attachment.originalName || attachment.filename || "download";
+
+      // Ensure the filename has the correct extension based on MIME type
+      if (!filename.includes(".") && attachment.mimetype) {
+        const extension = getFileExtension(attachment.mimetype);
+        if (extension) {
+          filename += `.${extension}`;
+        }
+      }
+
+      // Fetch the file as blob with proper headers to ensure correct content type
+      const response = await fetch(attachment.url, {
+        headers: {
+          Accept: attachment.mimetype || "application/octet-stream",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Get the blob with the correct MIME type
+      const blob = await response.blob();
+
+      // Create a new blob with the correct MIME type if it's different
+      const correctBlob = new Blob([blob], {
+        type: attachment.mimetype || blob.type || "application/octet-stream",
+      });
+
+      const url = window.URL.createObjectURL(correctBlob);
+
+      // Create download link
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
+      // Fallback: try direct download with proper headers
+      try {
+        const filename =
+          attachment.originalName || attachment.filename || "download";
+        const link = document.createElement("a");
+        link.href = `${attachment.url}?download=true&name=${encodeURIComponent(
+          filename
+        )}`;
+        link.download = filename;
+        link.target = "_blank";
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (fallbackError) {
+        console.error("Fallback download also failed:", fallbackError);
+        window.open(attachment.url, "_blank");
+      }
     }
   };
 
@@ -221,20 +348,58 @@ export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
         ) : (
           attachments.map((attachment) => (
             <div key={attachment._id} className="group">
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <FileViewer file={attachment} />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteClick(attachment._id)}
-                  disabled={isDeleting}
-                  className="text-red-600 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      {React.createElement(getFileIcon(attachment.mimetype), {
+                        className: "w-8 h-8 text-blue-500",
+                      })}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-medium text-gray-900 truncate">
+                          {attachment.originalName ||
+                            attachment.filename ||
+                            "Unknown file"}
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-500">
+                          {formatFileSize(attachment.size || 0)}
+                        </span>
+                        {attachment.mimetype && (
+                          <span className="text-xs text-gray-400">
+                            •{" "}
+                            {attachment.mimetype.split("/")[1]?.toUpperCase() ||
+                              "FILE"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(attachment)}
+                        className="h-8"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Download
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteClick(attachment._id)}
+                        disabled={isDeleting}
+                        className="text-red-600 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity h-8"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           ))
         )}

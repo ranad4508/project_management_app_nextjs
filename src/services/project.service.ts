@@ -398,7 +398,14 @@ export class ProjectService {
     const projects = await Project.find({
       workspace: { $in: workspaceIds },
     })
-      .populate("workspace", "name slug")
+      .populate({
+        path: "workspace",
+        select: "name slug members",
+        populate: {
+          path: "members.user",
+          select: "name email avatar",
+        },
+      })
       .populate("members", "name email avatar")
       .populate("createdBy", "name email avatar")
       .sort(sort)

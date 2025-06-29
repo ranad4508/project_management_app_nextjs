@@ -110,10 +110,10 @@ export function DashboardSidebar() {
                 isCollapsed={isCollapsed}
               />
               <NavItem
-                href="/dashboard/tasks"
+                href="/dashboard/my-tasks"
                 icon={<CheckSquare className="h-4 w-4" />}
                 label="My Tasks"
-                isActive={pathname === "/dashboard/tasks"}
+                isActive={pathname === "/dashboard/my-tasks"}
                 isCollapsed={isCollapsed}
               />
               <NavItem
@@ -123,13 +123,7 @@ export function DashboardSidebar() {
                 isActive={pathname === "/dashboard/calendar"}
                 isCollapsed={isCollapsed}
               />
-              {/* <NavItem
-              href="/dashboard/messages"
-              icon={<MessageSquare className="h-4 w-4" />}
-              label="Messages"
-              isActive={pathname === "/dashboard/messages"}
-              isCollapsed={isCollapsed}
-            /> */}
+
               <NavItem
                 href="/dashboard/analytics"
                 icon={<BarChart3 className="h-4 w-4" />}
