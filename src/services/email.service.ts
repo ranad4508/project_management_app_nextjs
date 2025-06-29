@@ -170,7 +170,7 @@ export class EmailService {
         <body>
           <div class="container">
             <div class="header">
-              <h1>🚀 You're Invited to Join ${workspaceName}</h1>
+              <h1>You're Invited to Join ${workspaceName}</h1>
               <p>${inviterName} has invited you to collaborate</p>
             </div>
             

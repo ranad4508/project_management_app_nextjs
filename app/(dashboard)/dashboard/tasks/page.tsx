@@ -81,11 +81,16 @@ export default function TasksPage() {
       const response = await fetch("/api/tasks");
       if (response.ok) {
         const data = await response.json();
-        setTasks(data.data || []);
+        // Ensure we always set an array, even if the API returns null/undefined
+        const tasksData = data.data || data.tasks || [];
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
+      } else {
+        setTasks([]);
       }
     } catch (error) {
       console.error("Error fetching tasks:", error);
       toast.error("Failed to load tasks");
+      setTasks([]);
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +182,7 @@ export default function TasksPage() {
     }
   };
 
-  const filteredTasks = tasks.filter((task) => {
+  const filteredTasks = (tasks || []).filter((task) => {
     const matchesSearch =
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description.toLowerCase().includes(searchQuery.toLowerCase());

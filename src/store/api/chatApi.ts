@@ -1,5 +1,4 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../index";
 import type {
   ChatRoom,
   ChatMessage,
@@ -15,11 +14,7 @@ export const chatApi = createApi({
   reducerPath: "chatApi",
   baseQuery: fetchBaseQuery({
     baseUrl: "/api/chat",
-    prepareHeaders: (headers, { getState }) => {
-      const token = (getState() as RootState).auth.token;
-      if (token) {
-        headers.set("authorization", `Bearer ${token}`);
-      }
+    prepareHeaders: (headers) => {
       headers.set("Content-Type", "application/json");
       return headers;
     },
@@ -50,7 +45,7 @@ export const chatApi = createApi({
 
     getRoomById: builder.query<ChatRoom, string>({
       query: (roomId) => `rooms/${roomId}`,
-      providesTags: (result, error, roomId) => [
+      providesTags: (_result, _error, roomId) => [
         { type: "ChatRoom", id: roomId },
       ],
       transformResponse: (response: ApiResponse<ChatRoom>) => {
@@ -85,7 +80,7 @@ export const chatApi = createApi({
         method: "PUT",
         body: data,
       }),
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "ChatRoom", id: roomId },
         "ChatRoom",
       ],
@@ -140,7 +135,7 @@ export const chatApi = createApi({
 
         return `rooms/${roomId}/messages?${searchParams.toString()}`;
       },
-      providesTags: (result, error, { roomId }) => [
+      providesTags: (_result, _error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
       ],
       transformResponse: (response: ApiResponse<MessageListResponse>) => {
@@ -166,7 +161,7 @@ export const chatApi = createApi({
             formData.append("isEncrypted", data.isEncrypted.toString());
 
           // Add files to FormData
-          data.attachments.forEach((file, index) => {
+          data.attachments.forEach((file) => {
             if (file instanceof File) {
               formData.append(`attachments`, file);
             }
@@ -191,7 +186,7 @@ export const chatApi = createApi({
           body: data,
         };
       },
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
       ],
       transformResponse: (response: ApiResponse<ChatMessage>) => {
@@ -213,7 +208,7 @@ export const chatApi = createApi({
       }),
       // Update cache with server response after successful edit
       onQueryStarted: async (
-        { messageId, content, roomId },
+        { messageId, content: _content, roomId },
         { dispatch, queryFulfilled }
       ) => {
         try {
@@ -248,7 +243,7 @@ export const chatApi = createApi({
           throw error;
         }
       },
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
         { type: "ChatMessage", id: "LIST" },
       ],
@@ -309,7 +304,7 @@ export const chatApi = createApi({
           throw error;
         }
       },
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
         { type: "ChatMessage", id: "LIST" },
       ],
@@ -334,7 +329,7 @@ export const chatApi = createApi({
       // Use optimistic updates for reactions
       onQueryStarted: async (
         { messageId, type, roomId },
-        { dispatch, queryFulfilled, getState }
+        { dispatch, queryFulfilled }
       ) => {
         // Get current user from session (we'll need to get this from the component)
         const patchResult = dispatch(
@@ -383,7 +378,7 @@ export const chatApi = createApi({
           throw error;
         }
       },
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
       ],
       transformResponse: (response: ApiResponse<ChatMessage>) => {
@@ -448,7 +443,7 @@ export const chatApi = createApi({
           throw error;
         }
       },
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "ChatMessage", id: roomId },
       ],
       transformResponse: (response: ApiResponse<ChatMessage>) => {
@@ -469,7 +464,7 @@ export const chatApi = createApi({
         method: "POST",
         body: { userId },
       }),
-      invalidatesTags: (result, error, { roomId }) => [
+      invalidatesTags: (_result, _error, { roomId }) => [
         { type: "RoomMembers", id: roomId },
       ],
       transformResponse: (response: ApiResponse<{ message: string }>) => {

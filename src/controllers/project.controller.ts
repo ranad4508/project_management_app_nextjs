@@ -130,6 +130,30 @@ export class ProjectController {
     }
   );
 
+  getProjectActivities = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const { id } = await params;
+      const user = await requireAuth(req);
+
+      const url = new URL(req.url);
+      const limit = parseInt(url.searchParams.get("limit") || "20");
+
+      const activities = await this.projectService.getProjectActivities(
+        id,
+        user.id,
+        limit
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: activities,
+      });
+    }
+  );
+
   getUserProjects = asyncHandler(
     async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);
@@ -162,12 +186,149 @@ export class ProjectController {
       const user = await requireAuth(req);
       const { id } = await params;
 
-      const project = await this.projectService.archiveProject(id, user.id);
+      try {
+        const project = await this.projectService.archiveProject(id, user.id);
+
+        const message =
+          project.status === "archived"
+            ? "Project archived successfully"
+            : "Project unarchived successfully";
+
+        return NextResponse.json({
+          success: true,
+          data: project,
+          message,
+        });
+      } catch (error: any) {
+        if (error.statusCode === 403) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Insufficient permissions to archive/unarchive this project. Only admins and owners can perform this action.",
+              error: "Insufficient permissions",
+            },
+            { status: 403 }
+          );
+        }
+        throw error; // Re-throw other errors to be handled by asyncHandler
+      }
+    }
+  );
+
+  getProjectSettings = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
+
+      const settings = await this.projectService.getProjectSettings(
+        id,
+        user.id
+      );
 
       return NextResponse.json({
         success: true,
-        data: project,
-        message: "Project archived successfully",
+        data: settings,
+      });
+    }
+  );
+
+  updateProjectSettings = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
+      const body = await req.json();
+
+      const settings = await this.projectService.updateProjectSettings(
+        id,
+        user.id,
+        body
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: settings,
+        message: "Project settings updated successfully",
+      });
+    }
+  );
+
+  getProjectMembers = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
+
+      const members = await this.projectService.getProjectMembers(id, user.id);
+
+      return NextResponse.json({
+        success: true,
+        data: members,
+      });
+    }
+  );
+
+  addProjectMember = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
+      const body = await req.json();
+
+      const result = await this.projectService.addProjectMember(
+        id,
+        user.id,
+        body
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+        message: "Member added successfully",
+      });
+    }
+  );
+
+  removeProjectMember = asyncHandler(
+    async (
+      req: NextRequest,
+      { params }: { params: Promise<{ id: string }> }
+    ): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { id } = await params;
+      const { searchParams } = new URL(req.url);
+      const memberId = searchParams.get("memberId");
+
+      if (!memberId) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Member ID is required",
+          },
+          { status: 400 }
+        );
+      }
+
+      const result = await this.projectService.removeProjectMember(
+        id,
+        user.id,
+        memberId
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+        message: "Member removed successfully",
       });
     }
   );

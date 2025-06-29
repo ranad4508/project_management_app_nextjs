@@ -7,6 +7,8 @@ import { userApi } from "./api/userApi";
 import { workspaceApi } from "./api/workspaceApi";
 import { projectApi } from "./api/projectApi";
 import { chatApi } from "./api/chatApi";
+import { taskApi } from "./api/taskApi";
+import { labelApi } from "./api/labelApi";
 import authSlice from "./slices/authSlice";
 import userSlice from "./slices/userSlice";
 import chatSlice from "./slices/chatSlice";
@@ -38,6 +40,8 @@ const rootReducer = combineReducers({
   [workspaceApi.reducerPath]: workspaceApi.reducer,
   [projectApi.reducerPath]: projectApi.reducer,
   [chatApi.reducerPath]: chatApi.reducer,
+  [taskApi.reducerPath]: taskApi.reducer,
+  [labelApi.reducerPath]: labelApi.reducer,
 });
 
 // Persisted reducer
@@ -61,7 +65,9 @@ export const store = configureStore({
       userApi.middleware,
       workspaceApi.middleware,
       projectApi.middleware,
-      chatApi.middleware
+      chatApi.middleware,
+      taskApi.middleware,
+      labelApi.middleware
     ),
 });
 

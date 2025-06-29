@@ -1,5 +1,4 @@
 import { Socket } from "socket.io";
-import jwt from "jsonwebtoken";
 import { User } from "@/src/models/user";
 import { ChatRoom } from "@/src/models/chat-room";
 
@@ -14,18 +13,15 @@ export const authenticateSocket = async (
   next: (err?: Error) => void
 ) => {
   try {
-    const token =
-      socket.handshake.auth.token ||
-      socket.handshake.headers.authorization?.split(" ")[1];
+    // Get userId directly from auth (sent by frontend)
+    const userId = socket.handshake.auth.userId;
 
-    if (!token) {
-      return next(new Error("Authentication token required"));
+    if (!userId) {
+      return next(new Error("User ID required for authentication"));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-    const user = await User.findById(decoded.userId).select(
-      "name email avatar"
-    );
+    // Validate user exists in database
+    const user = await User.findById(userId).select("name email avatar");
 
     if (!user) {
       return next(new Error("User not found"));
@@ -37,7 +33,7 @@ export const authenticateSocket = async (
 
     next();
   } catch (error) {
-    next(new Error("Invalid authentication token"));
+    next(new Error("Invalid user authentication"));
   }
 };
 

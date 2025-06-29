@@ -46,6 +46,7 @@ export const authOptions: NextAuthOptions = {
             role: result.user.role,
             isVerified: result.user.isVerified,
             mfaEnabled: result.user.mfaEnabled,
+            image: result.user.avatar || result.user.image,
           };
         } catch (error: any) {
           throw new Error(error.message);
@@ -62,6 +63,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.isVerified = user.isVerified;
         token.mfaEnabled = user.mfaEnabled;
+        token.image = user.image;
       }
       return token;
     },
@@ -73,6 +75,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role;
         session.user.isVerified = token.isVerified;
         session.user.mfaEnabled = token.mfaEnabled;
+        session.user.image = token.image;
       }
       return session;
     },

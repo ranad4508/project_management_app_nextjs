@@ -30,6 +30,7 @@ export interface FilterParams {
   createdBy?: string;
   dateFrom?: string;
   dateTo?: string;
+  labels?: string[];
 }
 
 export interface ErrorResponse {

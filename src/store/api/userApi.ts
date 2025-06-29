@@ -35,10 +35,10 @@ export const userApi = createApi({
   reducerPath: "userApi",
   baseQuery: fetchBaseQuery({
     baseUrl: "/api/user",
-    prepareHeaders: (headers, { getState }) => {
-      const token = (getState() as RootState).auth.token;
-      if (token) {
-        headers.set("authorization", `Bearer ${token}`);
+    prepareHeaders: (headers, { endpoint }) => {
+      // Don't set Content-Type for file uploads (FormData)
+      if (endpoint !== "uploadAvatar") {
+        headers.set("Content-Type", "application/json");
       }
       return headers;
     },

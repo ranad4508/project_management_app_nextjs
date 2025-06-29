@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { ChatRoom } from "@/src/models/chat-room";
-import { ChatRoomKey, UserKeyPair } from "@/src/models/encryption";
+import { ChatRoomKey } from "@/src/models/encryption";
 import { EncryptionService } from "./encryption.service";
 import type { EncryptionKeys } from "@/src/types/chat.types";
 

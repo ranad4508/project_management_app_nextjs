@@ -236,6 +236,117 @@ export const projectApi = createApi({
         throw new Error(response.message || "Failed to archive project");
       },
     }),
+
+    // Get project settings
+    getProjectSettings: builder.query<Project, string>({
+      query: (id) => `/${id}/settings`,
+      providesTags: (result, error, id) => [{ type: "Project", id }],
+      transformResponse: (response: ApiResponse<Project>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to fetch project settings");
+      },
+    }),
+
+    // Update project settings
+    updateProjectSettings: builder.mutation<
+      Project,
+      { id: string; data: Partial<UpdateProjectData> }
+    >({
+      query: ({ id, data }) => ({
+        url: `/${id}/settings`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Project", id },
+        "Project",
+        { type: "WorkspaceProjects", id: "LIST" },
+      ],
+      transformResponse: (response: ApiResponse<Project>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(
+          response.message || "Failed to update project settings"
+        );
+      },
+    }),
+
+    // Get project members
+    getProjectMembers: builder.query<
+      {
+        members: ProjectMember[];
+        createdBy: ProjectMember;
+        totalMembers: number;
+      },
+      string
+    >({
+      query: (id) => `/${id}/members`,
+      providesTags: (result, error, id) => [{ type: "Project", id }],
+      transformResponse: (response: ApiResponse<any>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to fetch project members");
+      },
+    }),
+
+    // Add project member
+    addProjectMember: builder.mutation<
+      { message: string; members: ProjectMember[] },
+      { id: string; memberId: string }
+    >({
+      query: ({ id, memberId }) => ({
+        url: `/${id}/members`,
+        method: "POST",
+        body: { memberId },
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: "Project", id }],
+      transformResponse: (response: ApiResponse<any>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to add project member");
+      },
+    }),
+
+    // Remove project member
+    removeProjectMember: builder.mutation<
+      { message: string; members: ProjectMember[] },
+      { id: string; memberId: string }
+    >({
+      query: ({ id, memberId }) => ({
+        url: `/${id}/members?memberId=${memberId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: "Project", id }],
+      transformResponse: (response: ApiResponse<any>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(response.message || "Failed to remove project member");
+      },
+    }),
+
+    // Get project activities
+    getProjectActivities: builder.query<
+      any[],
+      { projectId: string; limit?: number }
+    >({
+      query: ({ projectId, limit = 20 }) => ({
+        url: `/${projectId}/activities?limit=${limit}`,
+      }),
+      transformResponse: (response: ApiResponse<any[]>) => {
+        if (response.success && response.data) {
+          return response.data;
+        }
+        throw new Error(
+          response.message || "Failed to fetch project activities"
+        );
+      },
+    }),
   }),
 });
 
@@ -247,6 +358,12 @@ export const {
   useUpdateProjectMutation,
   useDeleteProjectMutation,
   useArchiveProjectMutation,
+  useGetProjectSettingsQuery,
+  useUpdateProjectSettingsMutation,
+  useGetProjectMembersQuery,
+  useAddProjectMemberMutation,
+  useRemoveProjectMemberMutation,
+  useGetProjectActivitiesQuery,
 } = projectApi;
 
 // Export types

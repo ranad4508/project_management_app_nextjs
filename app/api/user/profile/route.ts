@@ -22,25 +22,41 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // For users created before timestamps were added, extract creation time from ObjectId
+    const createdAtFallback =
+      user.createdAt ||
+      new Date(parseInt(user._id.toString().substring(0, 8), 16) * 1000);
+
+    // Update the user document with createdAt if it doesn't exist
+    if (!user.createdAt) {
+      await User.findByIdAndUpdate(user._id, {
+        createdAt: createdAtFallback,
+        updatedAt: createdAtFallback,
+      });
+    }
+
+    const responseData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      image: user.avatar,
+      avatar: user.avatar, // Add both image and avatar fields
+      bio: user.bio,
+      phone: user.phone,
+      location: user.location,
+      timezone: user.timezone,
+      language: user.language,
+      theme: user.preferences?.theme || "system",
+      emailNotifications: user.preferences?.emailNotifications ?? true,
+      pushNotifications: user.preferences?.pushNotifications ?? true,
+      mfaEnabled: user.mfaEnabled,
+      createdAt: createdAtFallback,
+      updatedAt: user.updatedAt || createdAtFallback,
+    };
+
     return NextResponse.json({
       success: true,
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        image: user.avatar,
-        bio: user.bio,
-        phone: user.phone,
-        location: user.location,
-        timezone: user.timezone,
-        language: user.language,
-        theme: user.preferences?.theme || "system",
-        emailNotifications: user.preferences?.emailNotifications ?? true,
-        pushNotifications: user.preferences?.pushNotifications ?? true,
-        mfaEnabled: user.mfaEnabled,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error("Get profile error:", error);

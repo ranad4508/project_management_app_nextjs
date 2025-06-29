@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Bell, Menu, Search, X } from "lucide-react";
+import { useGetProfileQuery } from "@/src/store/api/userApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -31,6 +32,14 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
+  // Fetch the latest profile data to get updated avatar
+  const { data: profile, isLoading: profileLoading } = useGetProfileQuery(
+    undefined,
+    {
+      // Skip the query if user doesn't have an ID
+      skip: !user?.id,
+    }
+  );
   const userInitials = user.name
     ? user.name
         .split(" ")
@@ -38,6 +47,10 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
         .join("")
         .toUpperCase()
     : "U";
+
+  // Use profile avatar if available, fallback to session user image
+  // Check both 'avatar' and 'image' fields from profile
+  const avatarUrl = profile?.data?.avatar || profile?.data?.image || user.image;
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-white px-4 dark:bg-gray-950 dark:border-gray-800 sm:px-6">
@@ -90,10 +103,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage
-                  src={user.image || undefined}
-                  alt={user.name || "User"}
-                />
+                <AvatarImage src={avatarUrl} alt={user.name || "User"} />
                 <AvatarFallback>{userInitials}</AvatarFallback>
               </Avatar>
             </Button>

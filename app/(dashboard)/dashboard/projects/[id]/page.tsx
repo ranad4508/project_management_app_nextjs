@@ -1,35 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   Archive,
   Calendar,
-  CheckCircle2,
   ChevronRight,
   Clock,
   Edit,
   Home,
   MoreVertical,
-  Plus,
   Settings,
   Trash2,
   Users,
+  Download,
+  File,
+  Image,
+  Video,
+  Music,
+  FileText,
+  Archive as ArchiveIcon,
 } from "lucide-react";
 import {
   useGetProjectByIdQuery,
   useArchiveProjectMutation,
   useDeleteProjectMutation,
+  useGetProjectActivitiesQuery,
 } from "@/src/store/api/projectApi";
+import { useGetTasksQuery } from "@/src/store/api/taskApi";
+import { useGetWorkspaceMembersQuery } from "@/src/store/api/workspaceApi";
+import { TaskBoard } from "@/components/tasks/TaskBoard";
+import { EditProjectDialog } from "@/components/projects/dialogs/EditProjectDialog";
+import { ProjectActivityFeed } from "@/components/projects/ProjectActivityFeed";
+import { LabelManager } from "@/components/labels/LabelManager";
+
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,12 +67,85 @@ export default function ProjectPage() {
   const projectId = params.id as string;
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
 
   const { data: project, isLoading, error } = useGetProjectByIdQuery(projectId);
+  const { data: activities, isLoading: activitiesLoading } =
+    useGetProjectActivitiesQuery({
+      projectId,
+      limit: 20,
+    });
+
+  // Get all tasks to extract attachments
+  const { data: tasksResponse } = useGetTasksQuery({
+    projectId,
+    page: 1,
+    limit: 1000, // Get all tasks
+  });
+
+  // Get workspace members for team tab
+  const workspaceId =
+    typeof project?.workspace === "object"
+      ? project.workspace._id
+      : project?.workspace;
+
+  const { data: workspaceMembersData } = useGetWorkspaceMembersQuery(
+    workspaceId || "",
+    { skip: !workspaceId }
+  );
+
+  const workspaceMembers = workspaceMembersData?.members || [];
+
   const [archiveProject, { isLoading: isArchiving }] =
     useArchiveProjectMutation();
   const [deleteProject, { isLoading: isDeleting }] = useDeleteProjectMutation();
+
+  // Extract all attachments from tasks
+  const allAttachments = React.useMemo(() => {
+    if (!tasksResponse?.data?.tasks) {
+      return [];
+    }
+
+    return tasksResponse.data.tasks.reduce((acc: any[], task: any) => {
+      if (
+        task.attachments &&
+        Array.isArray(task.attachments) &&
+        task.attachments.length > 0
+      ) {
+        const taskAttachments = task.attachments.map((attachment: any) => ({
+          ...attachment,
+          taskTitle: task.title,
+          taskId: task._id,
+          // Ensure we have the required fields
+          _id: attachment._id || attachment.id,
+          filename:
+            attachment.filename || attachment.originalName || attachment.name,
+          mimetype:
+            attachment.mimetype ||
+            attachment.type ||
+            "application/octet-stream",
+          url: attachment.url,
+          size: attachment.size || 0,
+        }));
+        return [...acc, ...taskAttachments];
+      }
+      return acc;
+    }, []);
+  }, [tasksResponse?.data?.tasks]);
+
+  // Helper function to get file icon
+  const getFileIcon = (mimeType?: string) => {
+    if (!mimeType) return File;
+    if (mimeType.startsWith("image/")) return Image;
+    if (mimeType.startsWith("video/")) return Video;
+    if (mimeType.startsWith("audio/")) return Music;
+    if (mimeType.includes("pdf") || mimeType.includes("document"))
+      return FileText;
+    if (mimeType.includes("zip") || mimeType.includes("rar"))
+      return ArchiveIcon;
+    return File;
+  };
 
   if (error) {
     toast({
@@ -78,15 +158,18 @@ export default function ProjectPage() {
   const handleArchiveProject = async () => {
     try {
       await archiveProject(projectId).unwrap();
+      const isCurrentlyArchived = project?.status === "archived";
       toast({
         title: "Success",
-        description: "Project archived successfully",
+        description: isCurrentlyArchived
+          ? "Project unarchived successfully"
+          : "Project archived successfully",
       });
       setIsArchiveDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to archive project. Please try again.",
+        description: "Failed to update project status. Please try again.",
         variant: "destructive",
       });
     }
@@ -189,14 +272,6 @@ export default function ProjectPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  router.push(`/dashboard/projects/${projectId}/edit`)
-                }
-              >
-                <Edit className="mr-2 h-4 w-4" /> Edit
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon">
@@ -214,9 +289,11 @@ export default function ProjectPage() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => setIsArchiveDialogOpen(true)}
-                    disabled={project.status === "archived"}
                   >
-                    <Archive className="mr-2 h-4 w-4" /> Archive Project
+                    <Archive className="mr-2 h-4 w-4" />
+                    {project.status === "archived"
+                      ? "Unarchive Project"
+                      : "Archive Project"}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setIsDeleteDialogOpen(true)}
@@ -292,27 +369,30 @@ export default function ProjectPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex -space-x-2 mb-4">
-                  {project.members.slice(0, 5).map((member) => (
+                  {workspaceMembers.slice(0, 5).map((member) => (
                     <Avatar
-                      key={member._id}
+                      key={member.user._id}
                       className="border-2 border-background"
                     >
                       <AvatarImage
-                        src={member.avatar || "/placeholder.svg"}
-                        alt={member.name}
+                        src={member.user.avatar || "/placeholder.svg"}
+                        alt={member.user.name}
                       />
-                      <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>
+                        {member.user.name.charAt(0)}
+                      </AvatarFallback>
                     </Avatar>
                   ))}
-                  {project.members.length > 5 && (
+                  {workspaceMembers.length > 5 && (
                     <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-xs font-medium">
-                      +{project.members.length - 5}
+                      +{workspaceMembers.length - 5}
                     </div>
                   )}
                 </div>
-                <Button variant="outline" size="sm" className="w-full">
-                  <Users className="mr-2 h-4 w-4" /> Manage Team
-                </Button>
+                <span>
+                  {workspaceMembers.length} members are contributing to this
+                  project
+                </span>
               </CardContent>
             </Card>
 
@@ -348,51 +428,197 @@ export default function ProjectPage() {
           </div>
 
           <Tabs defaultValue="tasks" className="w-full">
-            <TabsList className="grid grid-cols-4 w-full sm:w-auto">
+            <TabsList className="grid grid-cols-5 w-full sm:w-auto">
               <TabsTrigger value="tasks">Tasks</TabsTrigger>
-              <TabsTrigger value="files">Files</TabsTrigger>
+              <TabsTrigger value="labels">Labels</TabsTrigger>
               <TabsTrigger value="team">Team</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>
             </TabsList>
             <TabsContent value="tasks" className="mt-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Tasks</h2>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" /> Add Task
-                </Button>
+              <TaskBoard
+                projectId={projectId}
+                projectName={project.name}
+                workspaceId={
+                  typeof project.workspace === "object"
+                    ? project.workspace._id
+                    : project.workspace
+                }
+              />
+            </TabsContent>
+
+            <TabsContent value="labels" className="mt-6">
+              <div className="space-y-4">
+                <LabelManager
+                  workspaceId={
+                    typeof project.workspace === "object"
+                      ? project.workspace._id
+                      : project.workspace
+                  }
+                  projectId={projectId}
+                  mode="manage"
+                />
               </div>
+            </TabsContent>
+
+            <TabsContent value="files" className="mt-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Task List</CardTitle>
-                  <CardDescription>
-                    Manage and track project tasks
-                  </CardDescription>
+                  <CardTitle>Project Files</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    All attachments from tasks in this project
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-10">
-                    <CheckCircle2 className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-                    <h3 className="mt-4 text-lg font-medium">No tasks yet</h3>
-                    <p className="text-muted-foreground mt-1">
-                      Create your first task to get started
-                    </p>
-                    <Button className="mt-4">
-                      <Plus className="mr-2 h-4 w-4" /> Create Task
-                    </Button>
+                  {allAttachments.length > 0 ? (
+                    <div className="space-y-4">
+                      {allAttachments.map((attachment: any) => {
+                        const IconComponent = getFileIcon(attachment.mimetype);
+                        return (
+                          <div
+                            key={attachment._id}
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <IconComponent className="w-8 h-8 text-gray-500" />
+                              <div>
+                                <p className="font-medium">
+                                  {attachment.filename}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  From task: {attachment.taskTitle}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {attachment.size
+                                    ? `${Math.round(attachment.size / 1024)} KB`
+                                    : "Unknown size"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  try {
+                                    // Use the download parameter to force download
+                                    const downloadUrl = `${
+                                      attachment.url
+                                    }?download=true&name=${encodeURIComponent(
+                                      attachment.filename
+                                    )}`;
+
+                                    // Create a temporary link to trigger download
+                                    const link = document.createElement("a");
+                                    link.href = downloadUrl;
+                                    link.download = attachment.filename;
+                                    link.style.display = "none";
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                  } catch (error) {
+                                    console.error("Download failed:", error);
+                                    // Fallback to opening in new tab
+                                    window.open(attachment.url, "_blank");
+                                  }
+                                }}
+                              >
+                                <Download className="w-4 h-4 mr-2" />
+                                Download
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <File className="mx-auto h-12 w-12 mb-4" />
+                      <p>No files found in this project</p>
+                      <p className="text-sm">
+                        Files will appear here when you upload them to tasks
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="team" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Workspace Members</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    All workspace members can be assigned to tasks in this
+                    project
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {workspaceMembers.length > 0 ? (
+                      workspaceMembers.map((member: any) => {
+                        const isProjectMember = project?.members?.some(
+                          (pm: any) =>
+                            pm._id === member.user._id || pm === member.user._id
+                        );
+                        const isOwner =
+                          project?.createdBy?._id === member.user._id;
+
+                        return (
+                          <div
+                            key={member.user._id}
+                            className="flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarImage src={member.user.avatar} />
+                                <AvatarFallback>
+                                  {member.user.name
+                                    .split(" ")
+                                    .map((n: string) => n[0])
+                                    .join("")
+                                    .toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium">
+                                  {member.user.name}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {member.user.email}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {member.role}
+                              </Badge>
+                              {isOwner && (
+                                <Badge variant="secondary">Owner</Badge>
+                              )}
+                              {isProjectMember && !isOwner && (
+                                <Badge variant="outline">Project Member</Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <Users className="mx-auto h-8 w-8 mb-2" />
+                        <p>No members in this workspace</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             </TabsContent>
 
-            <TabsContent value="files" className="mt-6">
-              {/* Files tab content */}
-            </TabsContent>
-
-            <TabsContent value="team" className="mt-6">
-              {/* Team tab content */}
-            </TabsContent>
-
             <TabsContent value="activity" className="mt-6">
-              {/* Activity tab content */}
+              <ProjectActivityFeed
+                projectId={projectId}
+                activities={activities || []}
+                isLoading={activitiesLoading}
+              />
             </TabsContent>
           </Tabs>
 
@@ -426,17 +652,22 @@ export default function ProjectPage() {
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* Archive Project Dialog */}
+          {/* Archive/Unarchive Project Dialog */}
           <AlertDialog
             open={isArchiveDialogOpen}
             onOpenChange={setIsArchiveDialogOpen}
           >
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Archive this project?</AlertDialogTitle>
+                <AlertDialogTitle>
+                  {project?.status === "archived"
+                    ? "Unarchive this project?"
+                    : "Archive this project?"}
+                </AlertDialogTitle>
                 <AlertDialogDescription>
-                  Archiving will hide the project from active views but preserve
-                  all data. You can unarchive the project later if needed.
+                  {project?.status === "archived"
+                    ? "Unarchiving will restore the project to active status and make it visible in active views again."
+                    : "Archiving will hide the project from active views but preserve all data. You can unarchive the project later if needed."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -447,11 +678,30 @@ export default function ProjectPage() {
                   onClick={handleArchiveProject}
                   disabled={isArchiving}
                 >
-                  {isArchiving ? "Archiving..." : "Archive Project"}
+                  {isArchiving
+                    ? project?.status === "archived"
+                      ? "Unarchiving..."
+                      : "Archiving..."
+                    : project?.status === "archived"
+                    ? "Unarchive Project"
+                    : "Archive Project"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Edit Project Dialog */}
+          {project && (
+            <EditProjectDialog
+              open={showEditDialog}
+              onOpenChange={setShowEditDialog}
+              project={project}
+              onProjectUpdated={() => {
+                // Refetch project data
+                window.location.reload();
+              }}
+            />
+          )}
         </>
       ) : (
         <div className="text-center py-10">

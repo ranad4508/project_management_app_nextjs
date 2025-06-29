@@ -321,8 +321,8 @@ export class WorkspaceService {
     }
 
     // Clean up members with null user references
-    const validMembers = workspace.members.filter((m) => m.user);
-    const invalidMembers = workspace.members.filter((m) => !m.user);
+    const validMembers = workspace.members.filter((m: any) => m.user);
+    const invalidMembers = workspace.members.filter((m: any) => !m.user);
 
     if (invalidMembers.length > 0) {
       console.warn(
@@ -601,8 +601,8 @@ export class WorkspaceService {
     }).populate("invitedBy", "name email");
 
     // Clean up members with null user references
-    const validMembers = workspace.members.filter((m) => m.user);
-    const invalidMembers = workspace.members.filter((m) => !m.user);
+    const validMembers = workspace.members.filter((m: any) => m.user);
+    const invalidMembers = workspace.members.filter((m: any) => !m.user);
 
     if (invalidMembers.length > 0) {
       console.warn(
