@@ -29,7 +29,8 @@ export default function MemberCard({
     member.name || (member.user && member.user.name) || "Unknown User";
   const memberEmail =
     member.email || (member.user && member.user.email) || "No email";
-  const memberId = member._id || (member.user && member.user._id) || "unknown";
+  // Always use the user ID, not the member document ID
+  const memberId = (member.user && member.user._id) || member._id || "unknown";
   const memberAvatar =
     member.avatar || (member.user && member.user.avatar) || null;
 

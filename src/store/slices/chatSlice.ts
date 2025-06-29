@@ -352,5 +352,19 @@ export const selectTypingUsersInRoom =
     state.chat.typingUsers[roomId] || [];
 
 export const selectOnlineUsersInRoom =
-  (roomId: string) => (state: { chat: ChatState }) =>
-    state.chat.onlineUsers.filter((user) => user.rooms.includes(roomId));
+  (roomId: string) => (state: { chat: ChatState }) => {
+    const usersInRoom = state.chat.onlineUsers.filter((user) =>
+      user.rooms.includes(roomId)
+    );
+
+    // Deduplicate users by userId to prevent showing duplicates
+    const uniqueUsers = usersInRoom.reduce((acc, user) => {
+      const existingUser = acc.find((u) => u.userId === user.userId);
+      if (!existingUser) {
+        acc.push(user);
+      }
+      return acc;
+    }, [] as typeof usersInRoom);
+
+    return uniqueUsers;
+  };

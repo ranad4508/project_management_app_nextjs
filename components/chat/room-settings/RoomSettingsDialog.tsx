@@ -26,8 +26,7 @@ export default function RoomSettingsDialog({
   const [activeTab, setActiveTab] = useState("general");
 
   // Get workspace data to check if current user is workspace owner
-  const workspaceId =
-    typeof room.workspace === "string" ? room.workspace : room.workspace?._id;
+  const workspaceId = room.workspace;
   const { data: workspace } = useGetWorkspaceByIdQuery(workspaceId, {
     skip: !workspaceId,
   });
@@ -70,7 +69,7 @@ export default function RoomSettingsDialog({
   const canDeleteRoom = isOwner || isAdmin; // Owners and admins can delete rooms
   const canArchiveRoom = isOwner; // Only owners can archive rooms
 
-  // Debug logging
+  // Enhanced debug logging
   console.log("🔍 [ROOM-SETTINGS] Permission Debug:", {
     // Room data structure
     room: room,
@@ -122,6 +121,17 @@ export default function RoomSettingsDialog({
     // String comparison test
     stringComparison: room.createdBy?._id === currentUser?.id,
     stringComparisonResult: `"${room.createdBy?._id}" === "${currentUser?.id}"`,
+
+    // Additional debugging for ID comparison
+    exactComparison: {
+      roomCreatorId: room.createdBy?._id,
+      currentUserId: currentUser?.id,
+      strictEqual: room.createdBy?._id === currentUser?.id,
+      stringEqual: String(room.createdBy?._id) === String(currentUser?.id),
+      bothAsStrings: `"${String(room.createdBy?._id)}" === "${String(
+        currentUser?.id
+      )}"`,
+    },
   });
 
   const tabProps = {

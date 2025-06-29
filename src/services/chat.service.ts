@@ -322,9 +322,16 @@ export class ChatService {
       throw new NotFoundError("Room not found");
     }
 
-    if (room.createdBy.toString() !== userId) {
+    // Check if user is room creator or admin
+    const isRoomCreator = room.createdBy.toString() === userId;
+    const userMember = room.members.find(
+      (member: any) => member.user.toString() === userId
+    );
+    const isAdmin = userMember?.role === "admin";
+
+    if (!isRoomCreator && !isAdmin) {
       throw new AuthorizationError(
-        "Only room creator can regenerate encryption keys"
+        "Only room creator or admins can regenerate encryption keys"
       );
     }
 
@@ -1560,9 +1567,18 @@ export class ChatService {
     }
 
     // Check if requester is the room owner
-    const isOwner = room.createdBy && room.createdBy.toString() === ownerId;
-    if (!isOwner) {
-      throw new AuthorizationError("Only room owners can change member roles");
+    const isRoomOwner = room.createdBy && room.createdBy.toString() === ownerId;
+
+    // Check if requester is an admin
+    const requesterMember = room.members.find(
+      (m: any) => m.user && m.user._id.toString() === ownerId
+    );
+    const isAdmin = requesterMember?.role === "admin";
+
+    if (!isRoomOwner && !isAdmin) {
+      throw new AuthorizationError(
+        "Only room owners and admins can change member roles"
+      );
     }
 
     // Find the member

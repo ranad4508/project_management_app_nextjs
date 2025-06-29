@@ -32,7 +32,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { UserPlus, Search, UserMinus, Trash2, Mail } from "lucide-react";
+import {
+  UserPlus,
+  Search,
+  UserMinus,
+  Trash2,
+  Mail,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import MemberCard from "../shared/MemberCard";
@@ -217,7 +224,8 @@ export default function MembersTab({
       // Update local state
       setMembers((prev) =>
         prev.map((m) => {
-          const id = m._id || (m.user && m.user._id);
+          // Always use the user ID, not the member document ID
+          const id = (m.user && m.user._id) || m._id;
           if (id === memberId) {
             return { ...m, role: newRole };
           }
@@ -372,19 +380,32 @@ export default function MembersTab({
 
           {/* Select All Checkbox */}
           {canManageMembers && selectableMembers.length > 0 && (
-            <div className="flex items-center space-x-2 p-2 border rounded-lg bg-muted/50">
-              <Checkbox
-                id="select-all"
-                checked={allSelectableSelected}
-                onCheckedChange={handleSelectAll}
-              />
-              <Label htmlFor="select-all" className="text-sm font-medium">
-                Select all removable members ({selectableMembers.length})
-              </Label>
+            <div className="flex items-center justify-between p-2 border rounded-lg bg-muted/50">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="select-all"
+                  checked={allSelectableSelected}
+                  onCheckedChange={handleSelectAll}
+                />
+                <Label htmlFor="select-all" className="text-sm font-medium">
+                  Select all removable members ({selectableMembers.length})
+                </Label>
+                {selectedMembers.length > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    ({selectedMembers.length} selected)
+                  </span>
+                )}
+              </div>
               {selectedMembers.length > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  ({selectedMembers.length} selected)
-                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowRemoveDialog(true)}
+                  disabled={isRemoving}
+                >
+                  <UserMinus className="h-4 w-4 mr-2" />
+                  Remove Selected ({selectedMembers.length})
+                </Button>
               )}
             </div>
           )}
@@ -392,8 +413,9 @@ export default function MembersTab({
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {filteredMembers.length > 0 ? (
               filteredMembers.map((member) => {
+                // Always use the user ID, not the member document ID
                 const memberId =
-                  member._id || (member.user && member.user._id) || "unknown";
+                  (member.user && member.user._id) || member._id || "unknown";
                 const isMemberOwner =
                   member.isOwner ||
                   (member.user &&
@@ -467,6 +489,42 @@ export default function MembersTab({
           </div>
         </CardContent>
       </Card>
+
+      {/* Remove Selected Members Dialog */}
+      <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600">
+              Remove Selected Members?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove {selectedMembers.length} selected
+              member(s) from this room? This action cannot be undone and they
+              will lose access to all room content.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemoving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkRemove}
+              disabled={isRemoving}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isRemoving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove Members
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

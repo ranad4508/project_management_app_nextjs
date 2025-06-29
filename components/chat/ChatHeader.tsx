@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useSession } from "next-auth/react";
 import { setSidebarOpen } from "@/src/store/slices/chatSlice";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -42,17 +43,28 @@ interface ChatHeaderProps {
 
 export function ChatHeader({ room }: ChatHeaderProps) {
   const dispatch = useDispatch();
+  const { data: session } = useSession();
   const { isSidebarOpen, isConnected } = useSelector(
     (state: RootState) => state.chat
   );
-  const { user: currentUser } = useSelector((state: RootState) => state.auth);
   const onlineUsers = useSelector(selectOnlineUsersInRoom(room._id));
+
+  // Use NextAuth session directly instead of Redux auth state
+  const currentUser = session?.user
+    ? {
+        id: session.user.id,
+        name: session.user.name || "",
+        email: session.user.email || "",
+        image: session.user.image || undefined,
+        role: session.user.role || undefined,
+      }
+    : null;
 
   const [showMembers, setShowMembers] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
 
-  // Check if current user can edit room settings
+  // Keep these for potential future use in room actions dropdown
   const isOwner =
     room.createdBy?._id === currentUser?.id ||
     String(room.createdBy?._id) === String(currentUser?.id);
@@ -63,7 +75,6 @@ export function ChatHeader({ room }: ChatHeaderProps) {
         String(m.user._id) === String(currentUser?.id))
   );
   const isAdmin = userMember?.role === "admin" || isOwner;
-  const canEditSettings = isAdmin;
 
   const getRoomIcon = () => {
     if (room.type === "general") {
@@ -96,17 +107,6 @@ export function ChatHeader({ room }: ChatHeaderProps) {
                 <h1 className="text-sm sm:text-base lg:text-lg font-semibold truncate">
                   {room.name}
                 </h1>
-                {canEditSettings && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowSettings(true)}
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                    title="Edit room settings"
-                  >
-                    <Settings className="h-3 w-3" />
-                  </Button>
-                )}
               </div>
               {room.description && (
                 <p className="text-xs sm:text-sm text-muted-foreground truncate hidden sm:block">

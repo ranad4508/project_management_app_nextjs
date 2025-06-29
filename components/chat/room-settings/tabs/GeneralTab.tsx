@@ -97,7 +97,7 @@ export default function GeneralTab({
                 className={!canEdit ? "opacity-50" : ""}
               >
                 <Edit3 className="h-4 w-4 mr-2" />
-                Edit {!canEdit && "(Debug)"}
+                Edit
               </Button>
             )}
           </CardTitle>
