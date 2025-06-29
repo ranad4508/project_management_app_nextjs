@@ -120,8 +120,12 @@ export class TaskService {
     });
 
     await task.save();
-    await task.populate("assignedTo", "name email avatar");
-    await task.populate("createdBy", "name email avatar");
+    await task.populate([
+      { path: "assignedTo", select: "name email avatar" },
+      { path: "createdBy", select: "name email avatar" },
+      { path: "labels", select: "name color" },
+      { path: "project", select: "name workspace" },
+    ]);
 
     // If this is a subtask, add it to parent's subtasks array
     if (data.parentTask) {
@@ -261,7 +265,8 @@ export class TaskService {
       .populate("comments.user", "name email avatar")
       .populate("activities.user", "name email avatar")
       .populate("dependencies", "title status")
-      .populate("subtasks", "title status");
+      .populate("subtasks", "title status")
+      .populate("labels", "name color");
 
     if (!task) {
       throw new NotFoundError("Task not found");
@@ -354,7 +359,12 @@ export class TaskService {
     task.activities.push(...changes);
 
     await task.save();
-    await task.populate("assignedTo", "name email avatar");
+    await task.populate([
+      { path: "assignedTo", select: "name email avatar" },
+      { path: "labels", select: "name color" },
+      { path: "createdBy", select: "name email avatar" },
+      { path: "project", select: "name workspace" },
+    ]);
 
     // Update parent task progress if this is a subtask
     if (task.parentTask) {
@@ -576,6 +586,7 @@ export class TaskService {
       })
       .populate("assignedTo", "name email avatar")
       .populate("createdBy", "name email avatar")
+      .populate("labels", "name color")
       .sort(sort)
       .skip(skip)
       .limit(limit);
