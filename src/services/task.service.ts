@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Task } from "@/src/models/task";
 import { Project } from "@/src/models/project";
 import { User } from "@/src/models/user";
+import { Workspace } from "@/src/models/workspace";
 import { NotificationService } from "./notification.service";
 import { FileUploadService } from "./file-upload.service";
 import {
@@ -525,7 +526,107 @@ export class TaskService {
   }
 
   /**
-   * Get user tasks
+   * Get all accessible tasks for user (from all workspaces they're a member of)
+   */
+  async getAllAccessibleTasks(
+    userId: string,
+    pagination: PaginationParams = {},
+    filters: FilterParams = {}
+  ) {
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = pagination;
+    const { status, priority, dateFrom, dateTo, search, assignedTo } = filters;
+
+    const skip = (page - 1) * limit;
+    const sort: Record<string, 1 | -1> = {
+      [sortBy]: sortOrder === "asc" ? 1 : -1,
+    };
+
+    // First, get all workspaces the user is a member of
+    const workspaces = await Workspace.find({
+      "members.user": userId,
+    }).select("_id");
+
+    const workspaceIds = workspaces.map((w) => w._id);
+
+    // Then get all projects from those workspaces
+    const projects = await Project.find({
+      workspace: { $in: workspaceIds },
+    }).select("_id");
+
+    const projectIds = projects.map((p) => p._id);
+
+    // Build query for tasks from accessible projects
+    const query: any = {
+      project: { $in: projectIds },
+    };
+
+    if (search) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { title: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+          { tags: { $in: [new RegExp(search, "i")] } },
+        ],
+      });
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    if (priority) {
+      query.priority = priority;
+    }
+
+    if (assignedTo) {
+      query.assignedTo = assignedTo;
+    }
+
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) query.createdAt.$lte = new Date(dateTo);
+    }
+
+    const tasks = await Task.find(query)
+      .populate({
+        path: "project",
+        select: "name slug workspace",
+        populate: {
+          path: "workspace",
+          select: "name",
+        },
+      })
+      .populate("assignedTo", "name email avatar")
+      .populate("createdBy", "name email avatar")
+      .populate("labels", "name color")
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Task.countDocuments(query);
+
+    return {
+      tasks,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  /**
+   * Get user tasks (only assigned to the user)
    */
   async getUserTasks(
     userId: string,

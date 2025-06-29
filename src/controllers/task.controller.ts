@@ -246,6 +246,40 @@ export class TaskController {
     }
   );
 
+  getAllAccessibleTasks = asyncHandler(
+    async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
+      const user = await requireAuth(req);
+      const { searchParams } = new URL(req.url);
+
+      const pagination = {
+        page: Number.parseInt(searchParams.get("page") || "1"),
+        limit: Number.parseInt(searchParams.get("limit") || "20"),
+        sortBy: searchParams.get("sortBy") || "createdAt",
+        sortOrder: (searchParams.get("sortOrder") || "desc") as "asc" | "desc",
+      };
+
+      const filters = {
+        search: searchParams.get("search") || undefined,
+        status: searchParams.get("status") || undefined,
+        priority: searchParams.get("priority") || undefined,
+        assignedTo: searchParams.get("assignedTo") || undefined,
+        dateFrom: searchParams.get("dateFrom") || undefined,
+        dateTo: searchParams.get("dateTo") || undefined,
+      };
+
+      const result = await this.taskService.getAllAccessibleTasks(
+        user.id,
+        pagination,
+        filters
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: result,
+      });
+    }
+  );
+
   getUserTasks = asyncHandler(
     async (req: NextRequest): Promise<NextResponse<ApiResponse>> => {
       const user = await requireAuth(req);

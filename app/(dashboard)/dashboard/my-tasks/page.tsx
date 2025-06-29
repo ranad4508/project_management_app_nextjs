@@ -45,7 +45,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
-import { useGetTasksQuery } from "@/src/store/api/taskApi";
+import { useGetMyTasksQuery } from "@/src/store/api/taskApi";
 import { TaskStatus, TaskPriority } from "@/src/enums/task.enum";
 
 export default function MyTasksPage() {
@@ -63,7 +63,7 @@ export default function MyTasksPage() {
     data: tasksResponse,
     isLoading,
     error,
-  } = useGetTasksQuery(
+  } = useGetMyTasksQuery(
     {
       page,
       limit: 20,

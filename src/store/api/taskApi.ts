@@ -169,6 +169,21 @@ export const taskApi = createApi({
       providesTags: ["Task"],
     }),
 
+    getMyTasks: builder.query<
+      ApiResponse<TaskListResponse>,
+      PaginationParams & {
+        status?: TaskStatus;
+        priority?: TaskPriority;
+        search?: string;
+      }
+    >({
+      query: (params) => ({
+        url: "/tasks/my-tasks",
+        params,
+      }),
+      providesTags: ["Task"],
+    }),
+
     getTaskById: builder.query<ApiResponse<Task>, string>({
       query: (id) => `/tasks/${id}`,
       providesTags: (_result, _error, id) => [{ type: "Task", id }],
@@ -435,6 +450,7 @@ export const taskApi = createApi({
 export const {
   useCreateTaskMutation,
   useGetTasksQuery,
+  useGetMyTasksQuery,
   useGetTaskByIdQuery,
   useUpdateTaskMutation,
   useDeleteTaskMutation,
