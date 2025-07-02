@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
-import { useGetUserRoomsQuery } from "@/src/store/api/chatApi";
+import { useChatRooms } from "@/hooks/use-dashboard-data";
 import {
   setRooms,
   setActiveRoom,
@@ -30,6 +30,7 @@ export default function ChatPage() {
 
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false); // Add this state
+  const hasInitializedRoom = useRef(false);
 
   const { rooms, activeRoomId, isSidebarOpen, isConnected, onlineUsers } =
     useSelector((state: RootState) => state.chat);
@@ -37,29 +38,36 @@ export default function ChatPage() {
   console.log("Check connection:", isConnected);
 
   const {
-    data: userRooms,
+    rooms: userRooms,
     isLoading,
     error,
-    refetch,
-  } = useGetUserRoomsQuery({ workspaceId });
+    mutate: refetch,
+  } = useChatRooms(workspaceId);
 
   // Check if general room exists
   const hasGeneralRoom =
-    userRooms?.some((room) => room.type === "general") || false;
-  const activeRoom = rooms.find((room) => room._id === activeRoomId);
+    Array.isArray(userRooms) &&
+    userRooms.some((room: any) => room.type === "general");
+  const activeRoom = rooms.find((room: any) => room._id === activeRoomId);
 
   useEffect(() => {
-    if (userRooms) {
+    if (
+      Array.isArray(userRooms) &&
+      userRooms.length > 0 &&
+      !hasInitializedRoom.current
+    ) {
       console.log("📋 Loaded rooms:", userRooms);
       dispatch(setRooms(userRooms));
 
       // Check if there's a room parameter (for invitation acceptance)
-      if (roomParam && userRooms.find((room) => room._id === roomParam)) {
+      if (roomParam && userRooms.find((room: any) => room._id === roomParam)) {
         console.log("🎯 Selecting room from URL parameter:", roomParam);
         dispatch(setActiveRoom(roomParam));
       } else if (!activeRoomId && userRooms.length > 0) {
         // Auto-select general room if no room is active
-        const generalRoom = userRooms.find((room) => room.type === "general");
+        const generalRoom = userRooms.find(
+          (room: any) => room.type === "general"
+        );
         if (generalRoom) {
           console.log("🏠 Auto-selecting general room:", generalRoom._id);
           dispatch(setActiveRoom(generalRoom._id));
@@ -69,12 +77,13 @@ export default function ChatPage() {
           dispatch(setActiveRoom(userRooms[0]._id));
         }
       }
+      hasInitializedRoom.current = true;
     }
-  }, [userRooms, dispatch, activeRoomId, roomParam]);
+  }, [userRooms, dispatch, roomParam]);
 
   // Auto-retry if no rooms found (general room might be creating)
   useEffect(() => {
-    if (!isLoading && userRooms && userRooms.length === 0) {
+    if (!isLoading && Array.isArray(userRooms) && userRooms.length === 0) {
       console.log("🔄 No rooms found, retrying in 2 seconds...");
       const timer = setTimeout(() => {
         refetch();

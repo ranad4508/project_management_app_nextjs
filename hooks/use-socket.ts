@@ -49,7 +49,7 @@ export function useSocket() {
     const socket = io(
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
       {
-        path: "/api/socket", // <-- Match your server's path here
+        path: "/api/socket/io", // <-- Match your server's path here
         withCredentials: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,

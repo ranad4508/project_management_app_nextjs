@@ -1,31 +1,84 @@
-import type { NextRequest } from "next/server";
-import { Server as NetServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
-import { SocketService } from "@/src/services/socket.service";
-
-let io: SocketIOServer | undefined;
+import { NextRequest, NextResponse } from "next/server";
+import { getSocketIO } from "@/lib/socket-server";
 
 export async function GET(req: NextRequest) {
-  if (!io) {
-    console.log("Initializing Socket.IO server...");
+  try {
+    // Initialize Socket.IO server
+    const { io } = getSocketIO();
 
-    // Create a mock HTTP server for Socket.IO
-    const httpServer = new NetServer();
+    if (!io) {
+      return NextResponse.json(
+        { success: false, message: "Socket.IO server not initialized" },
+        { status: 500 }
+      );
+    }
 
-    io = new SocketIOServer(httpServer, {
+    return NextResponse.json({
+      success: true,
+      message: "Socket.IO server is running",
       path: "/api/socket",
-      cors: {
-        origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-        methods: ["GET", "POST"],
-        credentials: true,
-      },
     });
-
-    // Initialize socket service
-    const socketService = new SocketService(httpServer);
-
-    console.log("Socket.IO server initialized");
+  } catch (error) {
+    console.error("Socket.IO initialization error:", error);
+    return NextResponse.json(
+      { success: false, message: "Failed to initialize Socket.IO server" },
+      { status: 500 }
+    );
   }
+}
 
-  return new Response("Socket.IO server is running", { status: 200 });
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { io } = getSocketIO();
+
+    if (!io) {
+      return NextResponse.json(
+        { success: false, message: "Socket.IO server not initialized" },
+        { status: 500 }
+      );
+    }
+
+    // Handle different socket events
+    const { event, userId, data } = body;
+
+    switch (event) {
+      case "notification":
+        if (userId && data) {
+          (io as any).emitNotification(userId, data);
+          return NextResponse.json({
+            success: true,
+            message: "Notification sent successfully",
+          });
+        }
+        break;
+
+      case "activity":
+        if (userId && data) {
+          (io as any).emitActivity(userId, data);
+          return NextResponse.json({
+            success: true,
+            message: "Activity sent successfully",
+          });
+        }
+        break;
+
+      default:
+        return NextResponse.json(
+          { success: false, message: "Unknown event type" },
+          { status: 400 }
+        );
+    }
+
+    return NextResponse.json(
+      { success: false, message: "Missing required parameters" },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error("Socket.IO API error:", error);
+    return NextResponse.json(
+      { success: false, message: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }

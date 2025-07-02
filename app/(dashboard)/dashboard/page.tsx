@@ -33,14 +33,15 @@ import {
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
-import {
-  useGetTasksQuery,
-  useGetOverdueTasksQuery,
-} from "@/src/store/api/taskApi";
-import { useGetWorkspacesQuery } from "@/src/store/api/workspaceApi";
-import { useGetUserProjectsQuery } from "@/src/store/api/projectApi";
 import { TaskStatus, TaskPriority } from "@/src/enums/task.enum";
 import { formatDistanceToNow } from "date-fns";
+import { DashboardActivities } from "@/components/dashboard/dashboard-activities";
+import {
+  useDashboardTasks,
+  useDashboardProjects,
+  useTaskStats,
+  useUserWorkspaces,
+} from "@/hooks/use-dashboard-data";
 
 // Component Interfaces
 interface StatsCardProps {
@@ -318,33 +319,37 @@ function ProjectCard({ project }: ProjectCardProps) {
               {project.stats?.completedTasks || 0} /{" "}
               {project.stats?.totalTasks || 0} tasks
             </span>
-            <span>
-              {project.workspace?.members?.length ||
-                project.members?.length ||
-                project.assignedTo?.length ||
-                0}{" "}
-              members
-            </span>
+            <span>{project.workspace?.members?.length || 0} members</span>
           </div>
         </div>
 
         <div className="flex items-center justify-between mt-4">
           <div className="flex -space-x-2">
-            {project.members?.slice(0, 3).map((member: any, index: number) => (
-              <Avatar
-                key={member._id || index}
-                className="w-6 h-6 border-2 border-white"
-              >
-                <AvatarImage src={member.avatar} />
-                <AvatarFallback className="text-xs">
-                  {member.name?.charAt(0) || "U"}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-            {(project.members?.length || 0) > 3 && (
+            {project.workspace?.members
+              ?.slice(0, 3)
+              .map((member: any, index: number) => {
+                // Handle both populated and non-populated member data
+                const user = member.user || member;
+                const userName = user.name || user.username || "User";
+                const userAvatar =
+                  user.avatar || user.profileImage || user.image;
+
+                return (
+                  <Avatar
+                    key={user._id || user.id || index}
+                    className="w-6 h-6 border-2 border-white"
+                  >
+                    <AvatarImage src={userAvatar} alt={userName} />
+                    <AvatarFallback className="text-xs bg-blue-100 text-blue-600">
+                      {userName.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                );
+              })}
+            {(project.workspace?.members?.length || 0) > 3 && (
               <div className="w-6 h-6 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center">
                 <span className="text-xs text-gray-600">
-                  +{project.members.length - 3}
+                  +{project.workspace.members.length - 3}
                 </span>
               </div>
             )}
@@ -481,25 +486,11 @@ function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
 
-  // Fetch data from APIs - always call hooks in the same order
-  const { data: tasksResponse, isLoading: tasksLoading } = useGetTasksQuery({
-    page: 1,
-    limit: 10,
-  });
-
-  const { data: overdueTasksResponse } = useGetOverdueTasksQuery();
-
-  const { data: workspacesResponse, isLoading: workspacesLoading } =
-    useGetWorkspacesQuery({
-      page: 1,
-      limit: 5,
-    });
-
-  const { data: projectsResponse, isLoading: projectsLoading } =
-    useGetUserProjectsQuery({
-      page: 1,
-      limit: 6,
-    });
+  // Fetch data from APIs using SWR - always call hooks in the same order
+  const { tasks, isLoading: tasksLoading } = useDashboardTasks();
+  const { projects, isLoading: projectsLoading } = useDashboardProjects();
+  const { workspaces, isLoading: workspacesLoading } = useUserWorkspaces();
+  const { stats: taskStats } = useTaskStats();
 
   // Handle loading and authentication after hooks
   if (status === "loading") {
@@ -517,19 +508,13 @@ export default function DashboardPage() {
     redirect("/login");
   }
 
-  // Calculate statistics from real data
-  const tasks = tasksResponse?.data?.tasks || [];
-  const overdueTasks = overdueTasksResponse?.data || [];
-  const workspaces = workspacesResponse?.workspaces || [];
-  const projects = projectsResponse?.projects || [];
-
-  const taskStats = {
-    total: tasks.length,
-    completed: tasks.filter((task) => task.status === TaskStatus.DONE).length,
-    inProgress: tasks.filter((task) => task.status === TaskStatus.IN_PROGRESS)
-      .length,
-    overdue: overdueTasks.length,
-  };
+  // Filter overdue tasks from the tasks data
+  const overdueTasks = tasks.filter((task: any) => {
+    if (!task.dueDate) return false;
+    const dueDate = new Date(task.dueDate);
+    const now = new Date();
+    return dueDate < now && task.status !== TaskStatus.DONE;
+  });
 
   const completionRate =
     taskStats.total > 0
@@ -624,7 +609,7 @@ export default function DashboardPage() {
                 ) : tasks.length > 0 ? (
                   tasks
                     .slice(0, 5)
-                    .map((task) => <TaskCard key={task._id} task={task} />)
+                    .map((task: any) => <TaskCard key={task._id} task={task} />)
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <ListTodo className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -660,7 +645,7 @@ export default function DashboardPage() {
                 ) : projects.length > 0 ? (
                   projects
                     .slice(0, 4)
-                    .map((project) => (
+                    .map((project: any) => (
                       <ProjectCard key={project._id} project={project} />
                     ))
                 ) : (
@@ -672,6 +657,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Recent Activities */}
+          <DashboardActivities limit={8} />
 
           {/* Overdue Tasks Alert */}
           {taskStats.overdue > 0 && (
@@ -688,7 +676,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {overdueTasks.slice(0, 3).map((task) => (
+                  {overdueTasks.slice(0, 3).map((task: any) => (
                     <div
                       key={task._id}
                       className="flex items-center justify-between p-3 bg-white rounded-lg"
@@ -744,7 +732,7 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : tasks.length > 0 ? (
-              tasks.map((task) => (
+              tasks.map((task: any) => (
                 <TaskCard key={task._id} task={task} detailed />
               ))
             ) : (
@@ -783,7 +771,7 @@ export default function DashboardPage() {
                 <div key={i} className="h-32 bg-muted rounded animate-pulse" />
               ))
             ) : projects.length > 0 ? (
-              projects.map((project) => (
+              projects.map((project: any) => (
                 <ProjectCard key={project._id} project={project} />
               ))
             ) : (
@@ -815,7 +803,7 @@ export default function DashboardPage() {
                 <div key={i} className="h-32 bg-muted rounded animate-pulse" />
               ))
             ) : workspaces.length > 0 ? (
-              workspaces.map((workspace) => (
+              workspaces.map((workspace: any) => (
                 <WorkspaceCard key={workspace._id} workspace={workspace} />
               ))
             ) : (

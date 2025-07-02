@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { useGetRoomMessagesQuery } from "@/src/store/api/chatApi";
+import { useChatMessages } from "@/hooks/use-dashboard-data";
 import { ChatHeader } from "./ChatHeader";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
@@ -31,13 +31,14 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
   const activeRoom = useSelector(selectActiveRoom);
   const messages = useSelector(selectRoomMessages(roomId));
 
-  // Skip RTK Query for pages > 1, use manual fetch
+  // Use SWR for initial message loading
   const {
-    data: messagesData,
+    messages: initialMessages,
+    pagination: messagesPagination,
     isLoading: isInitialLoading,
     error,
-    refetch,
-  } = useGetRoomMessagesQuery({ roomId, page: 1, limit: 50 }, { skip: false });
+    mutate: refetch,
+  } = useChatMessages(roomId, 1, 50);
 
   // Join room when component mounts
   useEffect(() => {
@@ -62,25 +63,23 @@ export function ChatWindow({ roomId }: ChatWindowProps) {
 
   // Load initial messages (page 1)
   useEffect(() => {
-    if (messagesData?.messages) {
+    if (initialMessages?.length) {
       console.log(
-        `📥 [CHAT-WINDOW] Loading ${messagesData.messages.length} initial messages for room ${roomId}`
+        `📥 [CHAT-WINDOW] Loading ${initialMessages.length} initial messages for room ${roomId}`
       );
-      console.log(`📊 [CHAT-WINDOW] Pagination info:`, messagesData.pagination);
+      console.log(`📊 [CHAT-WINDOW] Pagination info:`, messagesPagination);
 
       // Keep messages in newest-first order (as returned from database)
-      dispatch(setMessages({ roomId, messages: messagesData.messages }));
-      setHasMore(
-        messagesData.pagination.page < messagesData.pagination.totalPages
-      );
+      dispatch(setMessages({ roomId, messages: initialMessages }));
+      setHasMore(messagesPagination?.page < messagesPagination?.totalPages);
 
       console.log(
         `📄 [CHAT-WINDOW] Has more pages: ${
-          messagesData.pagination.page < messagesData.pagination.totalPages
+          messagesPagination?.page < messagesPagination?.totalPages
         }`
       );
     }
-  }, [messagesData, roomId, dispatch]);
+  }, [initialMessages, messagesPagination, roomId, dispatch]);
 
   // Manual fetch for additional pages
   const loadMoreMessages = async () => {

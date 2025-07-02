@@ -648,7 +648,7 @@ export class TaskService {
 
     // Build query - only tasks assigned to the user
     const query: any = {
-      assignedTo: userId,
+      assignedTo: new mongoose.Types.ObjectId(userId),
     };
 
     if (search) {
@@ -687,7 +687,7 @@ export class TaskService {
       })
       .populate("assignedTo", "name email avatar")
       .populate("createdBy", "name email avatar")
-      .populate("labels", "name color")
+      .populate("project", "name workspace")
       .sort(sort)
       .skip(skip)
       .limit(limit);
@@ -712,7 +712,7 @@ export class TaskService {
    */
   async getOverdueTasks(userId: string) {
     const tasks = await Task.find({
-      assignedTo: userId,
+      assignedTo: new mongoose.Types.ObjectId(userId),
       dueDate: { $lt: new Date() },
       status: { $nin: [TaskStatus.DONE, TaskStatus.CANCELLED] },
     })

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { connectDB } from "@/src/lib/mongodb";
-import { ChatRoom } from "@/src/models/ChatRoom";
-import { User } from "@/src/models/User";
+import { authOptions } from "@/lib/auth";
+import Database from "@/src/config/database";
+import { ChatRoom } from "@/src/models/chat-room";
+import { User } from "@/src/models/user";
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +15,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await connectDB();
+    await Database.connect();
 
     const room = await ChatRoom.findById(params.roomId)
       .populate("members.user", "name email avatar")
@@ -28,7 +28,8 @@ export async function GET(
 
     // Check if user is already a member
     const isMember = room.members.some(
-      (member: any) => member.user && member.user._id.toString() === session.user.id
+      (member: any) =>
+        member.user && member.user._id.toString() === session.user.id
     );
 
     if (isMember) {

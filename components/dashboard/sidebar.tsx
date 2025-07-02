@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { useGetWorkspacesQuery } from "@/src/store/api/workspaceApi";
+import { useUserWorkspaces } from "@/hooks/use-dashboard-data";
 import {
   BarChart3,
+  Bell,
   Calendar,
   CheckSquare,
   ChevronDown,
@@ -36,22 +37,17 @@ export function DashboardSidebar() {
   const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const [showAllWorkspaces, setShowAllWorkspaces] = useState(false);
 
-  // Fetch workspaces from API
+  // Fetch workspaces from API using SWR
   const {
-    data: workspacesData,
+    workspaces: allWorkspaces,
     isLoading: workspacesLoading,
     error: workspacesError,
-  } = useGetWorkspacesQuery({
-    limit: showAllWorkspaces ? 100 : 10, // Fetch more to know if there are additional workspaces
-  });
+  } = useUserWorkspaces();
 
-  const workspaces = workspacesData?.workspaces || [];
-  const totalWorkspaces =
-    workspacesData?.pagination?.total || workspaces.length;
   const displayedWorkspaces = showAllWorkspaces
-    ? workspaces
-    : workspaces.slice(0, 5);
-  const hasMoreWorkspaces = totalWorkspaces > 5;
+    ? allWorkspaces
+    : allWorkspaces.slice(0, 5);
+  const hasMoreWorkspaces = allWorkspaces.length > 5;
 
   return (
     <TooltipProvider>
@@ -117,6 +113,13 @@ export function DashboardSidebar() {
                 isCollapsed={isCollapsed}
               />
               <NavItem
+                href="/dashboard/notifications"
+                icon={<Bell className="h-4 w-4" />}
+                label="Notifications"
+                isActive={pathname === "/dashboard/notifications"}
+                isCollapsed={isCollapsed}
+              />
+              <NavItem
                 href="/dashboard/calendar"
                 icon={<Calendar className="h-4 w-4" />}
                 label="Calendar"
@@ -172,7 +175,7 @@ export function DashboardSidebar() {
                     </div>
                   ) : displayedWorkspaces.length > 0 ? (
                     <>
-                      {displayedWorkspaces.map((workspace) => (
+                      {displayedWorkspaces.map((workspace: any) => (
                         <NavItem
                           key={workspace._id}
                           href={`/dashboard/workspaces/${workspace._id}`}
@@ -199,7 +202,7 @@ export function DashboardSidebar() {
                           {showAllWorkspaces ? (
                             <>Show Less</>
                           ) : (
-                            <>See More ({totalWorkspaces - 5} more)</>
+                            <>See More ({allWorkspaces.length - 5} more)</>
                           )}
                         </Button>
                       )}

@@ -45,8 +45,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
-import { useGetMyTasksQuery } from "@/src/store/api/taskApi";
 import { TaskStatus, TaskPriority } from "@/src/enums/task.enum";
+import { useMyTasks } from "@/hooks/use-dashboard-data";
 
 export default function MyTasksPage() {
   const { data: session, status } = useSession();
@@ -57,28 +57,14 @@ export default function MyTasksPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
-  // Fetch user's tasks - always call hooks in the same order
-  // The getUserTasks endpoint automatically filters by logged-in user
-  const {
-    data: tasksResponse,
-    isLoading,
-    error,
-  } = useGetMyTasksQuery(
-    {
-      page,
-      limit: 20,
-      status: statusFilter !== "all" ? (statusFilter as TaskStatus) : undefined,
-      priority:
-        priorityFilter !== "all" ? (priorityFilter as TaskPriority) : undefined,
-      search: search || undefined,
-    },
-    {
-      skip: !session?.user?.id, // Skip the query if no user session
-    }
-  );
-
-  const tasks = tasksResponse?.data?.tasks || [];
-  const pagination = tasksResponse?.data?.pagination;
+  // Fetch user's tasks using SWR - always call hooks in the same order
+  const { tasks, pagination, isLoading, error } = useMyTasks({
+    page,
+    limit: 20,
+    status: statusFilter !== "all" ? (statusFilter as TaskStatus) : undefined,
+    priority:
+      priorityFilter !== "all" ? (priorityFilter as TaskPriority) : undefined,
+  });
 
   // Filter and sort tasks locally for better UX
   const filteredAndSortedTasks = useMemo(() => {
@@ -153,6 +139,23 @@ export default function MyTasksPage() {
 
   if (!session?.user) {
     redirect("/login");
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">
+            Error Loading Tasks
+          </h2>
+          <p className="text-red-600">{error.message}</p>
+          <pre className="mt-2 text-xs text-red-500 overflow-auto">
+            {JSON.stringify(error, null, 2)}
+          </pre>
+        </div>
+      </div>
+    );
   }
 
   const getStatusIcon = (status: TaskStatus) => {

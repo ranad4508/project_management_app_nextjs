@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { connectDB } from "@/src/lib/mongodb";
-import { ChatRoom } from "@/src/models/ChatRoom";
-import { User } from "@/src/models/User";
+import { authOptions } from "@/lib/auth";
+import Database from "@/src/config/database";
+import { ChatRoom } from "@/src/models/chat-room";
+import { User } from "@/src/models/user";
 import { MemberRole } from "@/src/enums/user.enum";
 
 export async function POST(
@@ -22,7 +22,7 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await connectDB();
+    await Database.connect();
 
     const room = await ChatRoom.findById(params.roomId);
     if (!room) {
@@ -55,7 +55,9 @@ export async function POST(
 
     await room.save();
 
-    console.log(`✅ User ${user.name} accepted invitation and joined room ${room.name}`);
+    console.log(
+      `✅ User ${user.name} accepted invitation and joined room ${room.name}`
+    );
 
     return NextResponse.json({
       message: "Successfully joined the room",

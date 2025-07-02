@@ -37,7 +37,8 @@ export class NotificationService {
   async getUserNotifications(
     userId: string,
     pagination: PaginationParams = {},
-    status?: NotificationStatus
+    status?: NotificationStatus,
+    type?: NotificationType
   ) {
     const {
       page = 1,
@@ -52,6 +53,9 @@ export class NotificationService {
     const query: any = { user: userId };
     if (status) {
       query.status = status;
+    }
+    if (type) {
+      query.type = type;
     }
 
     const notifications = await Notification.find(query)
@@ -108,6 +112,41 @@ export class NotificationService {
     );
 
     return { message: "All notifications marked as read" };
+  }
+
+  /**
+   * Get unread notification count
+   */
+  async getUnreadCount(userId: string) {
+    return await Notification.countDocuments({
+      user: userId,
+      status: NotificationStatus.UNREAD,
+    });
+  }
+
+  /**
+   * Delete notification
+   */
+  async deleteNotification(notificationId: string, userId: string) {
+    const notification = await Notification.findOneAndDelete({
+      _id: notificationId,
+      user: userId,
+    });
+
+    return notification;
+  }
+
+  /**
+   * Get dashboard activities (recent notifications for dashboard)
+   */
+  async getDashboardActivities(userId: string, limit: number = 10) {
+    const activities = await Notification.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("relatedTo.id", "name title")
+      .lean();
+
+    return activities;
   }
 
   /**
@@ -179,6 +218,66 @@ export class NotificationService {
             id: projectId,
           }
         )
+      )
+    );
+  }
+
+  /**
+   * Notify about task activities
+   */
+  async notifyTaskActivity(
+    taskId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    userIds: string[]
+  ) {
+    await Promise.all(
+      userIds.map((userId) =>
+        this.createNotification(userId, type, title, message, {
+          model: "Task",
+          id: taskId,
+        })
+      )
+    );
+  }
+
+  /**
+   * Notify about workspace activities
+   */
+  async notifyWorkspaceActivity(
+    workspaceId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    userIds: string[]
+  ) {
+    await Promise.all(
+      userIds.map((userId) =>
+        this.createNotification(userId, type, title, message, {
+          model: "Workspace",
+          id: workspaceId,
+        })
+      )
+    );
+  }
+
+  /**
+   * Notify about issue activities
+   */
+  async notifyIssueActivity(
+    issueId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    userIds: string[]
+  ) {
+    await Promise.all(
+      userIds.map((userId) =>
+        this.createNotification(userId, type, title, message, {
+          model: "Issue",
+          id: issueId,
+        })
       )
     );
   }

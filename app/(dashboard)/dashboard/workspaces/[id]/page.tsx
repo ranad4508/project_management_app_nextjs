@@ -47,8 +47,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
-  useGetWorkspaceByIdQuery,
-  useGetWorkspaceMembersQuery,
+  useWorkspaceById,
+  useWorkspaceMembers,
+} from "@/hooks/use-dashboard-data";
+import {
   useInviteMemberMutation,
   useUpdateMemberRoleMutation,
   useRemoveMemberMutation,
@@ -87,23 +89,21 @@ export default function WorkspacePage() {
   const [projectPage, setProjectPage] = useState(1);
   const [editingProject, setEditingProject] = useState<string | null>(null);
 
-  // Redux queries
+  // SWR queries
   const {
-    data: workspace,
+    workspace,
     isLoading: workspaceLoading,
     error: workspaceError,
-    refetch: refetchWorkspace,
-  } = useGetWorkspaceByIdQuery(workspaceId, {
-    skip: !workspaceId,
-  });
+    mutate: refetchWorkspace,
+  } = useWorkspaceById(workspaceId);
 
   const {
-    data: membersData,
+    members: membersData,
+    owner,
+    pendingInvitations,
     isLoading: membersLoading,
-    refetch: refetchMembers,
-  } = useGetWorkspaceMembersQuery(workspaceId, {
-    skip: !workspaceId || activeTab !== "members",
-  });
+    mutate: refetchMembers,
+  } = useWorkspaceMembers(workspaceId);
 
   // Project queries
   const {
@@ -147,7 +147,7 @@ export default function WorkspacePage() {
     if (!workspace || !session?.user) return MemberRole.MEMBER;
     if (workspace.owner._id === session.user.id) return MemberRole.ADMIN;
     const member = workspace.members.find(
-      (m) => m.user._id === session.user.id
+      (m: any) => m.user._id === session.user.id
     );
     return member?.role || MemberRole.MEMBER;
   };
@@ -301,7 +301,7 @@ export default function WorkspacePage() {
     // Try to find in workspace projects
     if (workspace?.projects) {
       const workspaceProject = workspace.projects.find(
-        (p) => p._id === editingProject
+        (p: any) => p._id === editingProject
       );
       if (workspaceProject) {
         return adaptProject(workspaceProject);
@@ -435,7 +435,7 @@ export default function WorkspacePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {workspace.projects && workspace.projects.length > 0 ? (
-                  workspace.projects.slice(0, 5).map((project) => (
+                  workspace.projects.slice(0, 5).map((project: any) => (
                     <div
                       key={project._id}
                       className="flex items-center justify-between"
@@ -492,8 +492,8 @@ export default function WorkspacePage() {
               <CardContent className="space-y-4">
                 {workspace.members
                   .slice(0, 5)
-                  .filter((member) => member.user) // Filter out members with null user
-                  .map((member) => (
+                  .filter((member: any) => member.user) // Filter out members with null user
+                  .map((member: any) => (
                     <div
                       key={member.user._id}
                       className="flex items-center gap-3"
@@ -506,7 +506,7 @@ export default function WorkspacePage() {
                           {member.user?.name
                             ? member.user.name
                                 .split(" ")
-                                .map((n) => n[0])
+                                .map((n: any) => n[0])
                                 .join("")
                                 .toUpperCase()
                             : "?"}
@@ -671,8 +671,8 @@ export default function WorkspacePage() {
         <TabsContent value="members" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">
-              Members ({membersData?.members.length || workspace.members.length}
-              )
+              Members (
+              {membersData?.members?.length || workspace.members.length})
             </h3>
             {isAdmin() && (
               <Dialog
@@ -772,8 +772,8 @@ export default function WorkspacePage() {
           ) : (
             <div className="grid gap-4">
               {(membersData?.members || workspace.members)
-                .filter((member) => member.user) // Filter out members with null user
-                .map((member) => (
+                .filter((member: any) => member.user) // Filter out members with null user
+                .map((member: any) => (
                   <MemberCard
                     key={member.user._id}
                     member={member}
@@ -792,7 +792,7 @@ export default function WorkspacePage() {
                     <h4 className="text-sm font-medium text-muted-foreground">
                       Pending Invitations
                     </h4>
-                    {membersData.pendingInvitations.map((invitation) => (
+                    {membersData.pendingInvitations.map((invitation: any) => (
                       <Card key={invitation._id}>
                         <CardContent className="flex items-center justify-between p-4">
                           <div>

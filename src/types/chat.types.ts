@@ -174,6 +174,17 @@ export interface ServerToClientEvents {
   "room:joined": (roomId: string, user: User) => void;
   "room:left": (roomId: string, userId: string) => void;
   "key:exchange": (data: KeyExchange) => void;
+  "notification:new": (notification: any) => void;
+  "notification:read": (data: {
+    notificationId: string;
+    userId: string;
+  }) => void;
+  "notification:all_read": (data: { userId: string }) => void;
+  "notification:deleted": (data: {
+    notificationId: string;
+    userId: string;
+  }) => void;
+  "activity:new": (activity: any) => void;
   error: (error: { message: string; code?: string }) => void;
 }
 

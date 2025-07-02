@@ -35,8 +35,8 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import Link from "next/link";
+import { useUserWorkspaces } from "@/hooks/use-dashboard-data";
 import {
-  useGetWorkspacesQuery,
   useCreateWorkspaceMutation,
   type CreateWorkspaceData,
 } from "@/src/store/api/workspaceApi";
@@ -49,18 +49,8 @@ export default function WorkspacesPage() {
     description: "",
   });
 
-  // Redux queries and mutations
-  const {
-    data: workspacesData,
-    isLoading,
-    error,
-    refetch,
-  } = useGetWorkspacesQuery({
-    page: 1,
-    limit: 20,
-    sortBy: "updatedAt",
-    sortOrder: "desc",
-  });
+  // SWR queries and RTK mutations
+  const { workspaces, isLoading, error, mutate: refetch } = useUserWorkspaces();
 
   const [createWorkspace, { isLoading: isCreating }] =
     useCreateWorkspaceMutation();
@@ -114,7 +104,7 @@ export default function WorkspacesPage() {
     );
   }
 
-  const workspaces = workspacesData?.workspaces || [];
+  // workspaces is already available from the hook
 
   return (
     <div className="space-y-6">
@@ -214,7 +204,7 @@ export default function WorkspacesPage() {
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {workspaces.map((workspace) => (
+          {workspaces.map((workspace: any) => (
             <Card
               key={workspace._id}
               className="hover:shadow-md transition-shadow"
@@ -270,7 +260,7 @@ export default function WorkspacesPage() {
                     </span>
                   </div>
                   <div className="flex -space-x-1">
-                    {workspace.members.slice(0, 3).map((member) => (
+                    {workspace.members.slice(0, 3).map((member: any) => (
                       <Avatar
                         key={member.user._id}
                         className="h-6 w-6 border border-background"
@@ -281,7 +271,7 @@ export default function WorkspacesPage() {
                         <AvatarFallback className="text-xs">
                           {member.user.name
                             .split(" ")
-                            .map((n) => n[0])
+                            .map((n: any) => n[0])
                             .join("")
                             .toUpperCase()}
                         </AvatarFallback>

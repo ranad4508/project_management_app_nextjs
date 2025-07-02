@@ -1,18 +1,21 @@
-import mongoose, { Schema, type Document } from "mongoose"
-import { NotificationType, NotificationStatus } from "@/src/enums/notification.enum"
+import mongoose, { Schema, type Document } from "mongoose";
+import {
+  NotificationType,
+  NotificationStatus,
+} from "@/src/enums/notification.enum";
 
 export interface INotification extends Document {
-  user: mongoose.Types.ObjectId
-  type: NotificationType
-  title: string
-  message: string
+  user: mongoose.Types.ObjectId;
+  type: NotificationType;
+  title: string;
+  message: string;
   relatedTo?: {
-    model: "Task" | "Project" | "Workspace" | "Chat" | "User"
-    id: mongoose.Types.ObjectId
-  }
-  status: NotificationStatus
-  readAt?: Date
-  createdAt: Date
+    model: "Task" | "Project" | "Workspace" | "Chat" | "User" | "Issue";
+    id: mongoose.Types.ObjectId;
+  };
+  status: NotificationStatus;
+  readAt?: Date;
+  createdAt: Date;
 }
 
 const NotificationSchema: Schema = new Schema(
@@ -40,7 +43,7 @@ const NotificationSchema: Schema = new Schema(
     relatedTo: {
       model: {
         type: String,
-        enum: ["Task", "Project", "Workspace", "Chat", "User"],
+        enum: ["Task", "Project", "Workspace", "Chat", "User", "Issue"],
       },
       id: {
         type: Schema.Types.ObjectId,
@@ -55,13 +58,14 @@ const NotificationSchema: Schema = new Schema(
       type: Date,
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
 // Indexes
-NotificationSchema.index({ user: 1, status: 1 })
-NotificationSchema.index({ createdAt: -1 })
-NotificationSchema.index({ type: 1 })
+NotificationSchema.index({ user: 1, status: 1 });
+NotificationSchema.index({ createdAt: -1 });
+NotificationSchema.index({ type: 1 });
 
 export const Notification =
-  mongoose.models.Notification || mongoose.model<INotification>("Notification", NotificationSchema)
+  mongoose.models.Notification ||
+  mongoose.model<INotification>("Notification", NotificationSchema);

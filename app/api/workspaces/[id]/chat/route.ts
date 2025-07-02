@@ -8,10 +8,22 @@ const chatController = new ChatController();
 export const GET = asyncHandler(
   async (
     req: NextRequest,
-    { params }: { params: Promise<{ workspaceId: string }> }
+    { params }: { params: Promise<{ id: string }> }
   ): Promise<NextResponse> => {
     await Database.connect();
-    return chatController.getWorkspaceChatRooms(req, { params });
+
+    // Add workspaceId to the request URL as a query parameter
+    const resolvedParams = await params;
+    const url = new URL(req.url);
+    url.searchParams.set("workspaceId", resolvedParams.id);
+
+    // Create a new request object with the modified URL
+    const modifiedReq = {
+      ...req,
+      url: url.toString(),
+    } as NextRequest;
+
+    return chatController.getUserRooms(modifiedReq);
   }
 );
 
