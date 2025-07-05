@@ -85,7 +85,6 @@ export function MessageReactions({
           reactionId: userReaction._id,
           roomId,
         }).unwrap();
-        toast.success("Reaction removed!");
       } else {
         // Add new reaction
         await addReactionMutation({
@@ -93,7 +92,6 @@ export function MessageReactions({
           type: type as any, // Cast to ReactionType
           roomId,
         }).unwrap();
-        toast.success("Reaction added!");
       }
     } catch (error) {
       console.error("Failed to update reaction:", error);

@@ -47,16 +47,36 @@ export const GET = asyncHandler(async (req: NextRequest) => {
       const projectIds = await Project.find({
         workspace: workspace._id,
       }).select("_id");
-      const [totalProjects, totalTasks, completedTasks] = await Promise.all([
-        Project.countDocuments({ workspace: workspace._id }),
-        Task.countDocuments({
-          project: { $in: projectIds },
-        }),
-        Task.countDocuments({
-          project: { $in: projectIds },
-          status: "done",
-        }),
-      ]);
+      const [totalProjects, totalTasks, completedTasks, allTasks] =
+        await Promise.all([
+          Project.countDocuments({ workspace: workspace._id }),
+          Task.countDocuments({
+            project: { $in: projectIds },
+          }),
+          Task.countDocuments({
+            project: { $in: projectIds },
+            status: "done",
+          }),
+          Task.find({
+            project: { $in: projectIds },
+          }).select("estimatedHours status"),
+        ]);
+
+      // Calculate effort-based completion
+      let totalEffort = 0;
+      let completedEffort = 0;
+
+      allTasks.forEach((task) => {
+        const effort = task.estimatedHours || 0;
+        totalEffort += effort;
+
+        if (task.status === "done") {
+          completedEffort += effort;
+        }
+      });
+
+      const completionRate =
+        totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
 
       return {
         ...workspace,
@@ -65,10 +85,9 @@ export const GET = asyncHandler(async (req: NextRequest) => {
           totalTasks,
           completedTasks,
           activeMembers: workspace.members?.length || 0,
-          completionRate:
-            totalTasks > 0
-              ? Math.round((completedTasks / totalTasks) * 100)
-              : 0,
+          completionRate,
+          totalEffort,
+          completedEffort,
         },
       };
     })

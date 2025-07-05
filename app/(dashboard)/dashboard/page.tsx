@@ -418,14 +418,8 @@ function WorkspaceCard({ workspace }: WorkspaceCardProps) {
 
           {/* Calculate and show completion rate */}
           {(() => {
-            const completionRate =
-              workspace.stats?.totalTasks > 0
-                ? Math.round(
-                    (workspace.stats.completedTasks /
-                      workspace.stats.totalTasks) *
-                      100
-                  )
-                : workspace.stats?.completionRate || 0;
+            // Use effort-based completion rate if available, otherwise fall back to task-based
+            const completionRate = workspace.stats?.completionRate || 0;
 
             return completionRate > 0 ? (
               <div className="flex items-center justify-between text-sm">
@@ -519,10 +513,8 @@ export default function DashboardPage() {
     return dueDate < now && task.status !== TaskStatus.DONE;
   });
 
-  const completionRate =
-    taskStats.total > 0
-      ? Math.round((taskStats.completed / taskStats.total) * 100)
-      : 0;
+  // Use the completion rate from the API (effort-based if available, otherwise task-based)
+  const completionRate = taskStats.completionRate || 0;
 
   return (
     <div className="flex flex-col gap-6">

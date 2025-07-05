@@ -203,8 +203,18 @@ export default function AnalyticsPage() {
       (project: any) => project.status === ProjectStatus.COMPLETED
     ).length;
 
+    // Calculate effort-based completion rate
+    const totalEffort = filteredTasks.reduce(
+      (sum: number, task: any) => sum + (task.estimatedHours || 0),
+      0
+    );
+    const completedEffort = filteredTasks
+      .filter((task: any) => task.status === TaskStatus.DONE)
+      .reduce((sum: number, task: any) => sum + (task.estimatedHours || 0), 0);
+
+    // Use only effort-based completion rate
     const completionRate =
-      totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
     const projectCompletionRate =
       totalProjects > 0
         ? Math.round((completedProjects / totalProjects) * 100)
@@ -380,14 +390,26 @@ export default function AnalyticsPage() {
         (task: any) => task.status === TaskStatus.DONE
       ).length;
 
+      // Calculate effort-based completion for workspace
+      const totalEffort = workspaceTasks.reduce(
+        (sum: number, task: any) => sum + (task.estimatedHours || 0),
+        0
+      );
+      const completedEffort = workspaceTasks
+        .filter((task: any) => task.status === TaskStatus.DONE)
+        .reduce(
+          (sum: number, task: any) => sum + (task.estimatedHours || 0),
+          0
+        );
+
+      const completionRate =
+        totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
+
       return {
         name: workspace.name,
         totalTasks: workspaceTasks.length,
         completedTasks,
-        completionRate:
-          workspaceTasks.length > 0
-            ? Math.round((completedTasks / workspaceTasks.length) * 100)
-            : 0,
+        completionRate,
         members: workspace.members?.length || 0, // Use actual workspace members count
         projects: workspaceProjects.length,
       };

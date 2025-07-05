@@ -435,6 +435,25 @@ export class ProjectService {
       workspace: { $in: workspaceIds },
     });
 
+    // Debug logging for workspace members
+    console.log("🔍 Project workspace members debug:", {
+      userId,
+      projectCount: projects.length,
+      projects: projects.map((p) => ({
+        id: p._id,
+        name: p.name,
+        workspaceId: p.workspace?._id,
+        workspaceName: p.workspace?.name,
+        workspaceMembersCount: p.workspace?.members?.length || 0,
+        workspaceMembers:
+          p.workspace?.members?.map((m: any) => ({
+            userId: m.user?._id || m.user,
+            userName: m.user?.name,
+            role: m.role,
+          })) || [],
+      })),
+    });
+
     // Get project statistics for each project
     const projectsWithStats = await Promise.all(
       projects.map(async (project) => {

@@ -173,76 +173,100 @@ export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
   };
 
   const handleDownload = async (attachment: any) => {
-    if (!attachment.url) {
-      console.error("File URL is not available");
-      return;
-    }
-
     try {
-      // Get the original filename with proper extension
-      let filename =
-        attachment.originalName || attachment.filename || "download";
+      console.log("🔍 Download attempt for attachment:", {
+        name: attachment.name,
+        url: attachment.url,
+        filename: attachment.filename,
+        originalName: attachment.originalName,
+      });
 
-      // Ensure the filename has the correct extension based on MIME type
-      if (!filename.includes(".") && attachment.mimetype) {
-        const extension = getFileExtension(attachment.mimetype);
-        if (extension) {
-          filename += `.${extension}`;
+      const urlPath = attachment.url;
+      if (!urlPath) {
+        console.error("File URL is not available");
+        toast.error("File information is not available");
+        return;
+      }
+
+      // Extract filename from URL (everything after the last slash)
+      const actualFilename = urlPath.split("/").pop();
+      if (!actualFilename) {
+        console.error("Could not extract filename from URL");
+        toast.error("Invalid file URL");
+        return;
+      }
+
+      console.log("🔍 Extracted filename from URL:", actualFilename);
+
+      // Get the original display name (what user sees)
+      const displayName =
+        attachment.originalName || attachment.name || actualFilename;
+
+      // The URL might be in different formats:
+      // New format: /api/uploads/uuid-filename.ext
+      // Old format: /uploads/timestamp-filename.ext
+
+      let downloadUrl: string;
+      if (urlPath.startsWith("/api/uploads/")) {
+        // New format - use the URL directly with download endpoint
+        const filename = urlPath.replace("/api/uploads/", "");
+        downloadUrl = `/api/uploads/${encodeURIComponent(
+          filename
+        )}/download?name=${encodeURIComponent(displayName)}`;
+      } else if (urlPath.startsWith("/uploads/")) {
+        // Old format - convert to new format
+        const filename = urlPath.replace("/uploads/", "");
+        downloadUrl = `/api/uploads/${encodeURIComponent(
+          filename
+        )}/download?name=${encodeURIComponent(displayName)}`;
+      } else {
+        // Fallback - assume it's a filename
+        downloadUrl = `/api/uploads/${encodeURIComponent(
+          actualFilename
+        )}/download?name=${encodeURIComponent(displayName)}`;
+      }
+
+      console.log("🔍 Attempting download with URL:", downloadUrl);
+
+      // First, check if the file exists by making a HEAD request to the file endpoint (not download)
+      const checkUrl = downloadUrl
+        .replace("/download?name=", "?name=")
+        .split("?")[0];
+
+      try {
+        const headResponse = await fetch(checkUrl, { method: "HEAD" });
+        console.log(
+          `🔍 File existence check for ${actualFilename}:`,
+          headResponse.status
+        );
+
+        if (!headResponse.ok) {
+          console.error(
+            `File not found: ${actualFilename} (status: ${headResponse.status})`
+          );
+          toast.error(`File not available: ${displayName}`);
+          return;
         }
+      } catch (headError) {
+        console.error("File existence check failed:", headError);
+        toast.error("Unable to verify file availability");
+        return;
       }
-
-      // Fetch the file as blob with proper headers to ensure correct content type
-      const response = await fetch(attachment.url, {
-        headers: {
-          Accept: attachment.mimetype || "application/octet-stream",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Get the blob with the correct MIME type
-      const blob = await response.blob();
-
-      // Create a new blob with the correct MIME type if it's different
-      const correctBlob = new Blob([blob], {
-        type: attachment.mimetype || blob.type || "application/octet-stream",
-      });
-
-      const url = window.URL.createObjectURL(correctBlob);
 
       // Create download link
       const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
+      link.href = downloadUrl;
+      link.download = displayName;
       link.style.display = "none";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      // Clean up the blob URL
-      window.URL.revokeObjectURL(url);
+      console.log(`✅ Downloading file: ${displayName} from ${downloadUrl}`);
+      toast.success(`Downloading ${displayName}`);
     } catch (error) {
       console.error("Download failed:", error);
-      // Fallback: try direct download with proper headers
-      try {
-        const filename =
-          attachment.originalName || attachment.filename || "download";
-        const link = document.createElement("a");
-        link.href = `${attachment.url}?download=true&name=${encodeURIComponent(
-          filename
-        )}`;
-        link.download = filename;
-        link.target = "_blank";
-        link.style.display = "none";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (fallbackError) {
-        console.error("Fallback download also failed:", fallbackError);
-        window.open(attachment.url, "_blank");
-      }
+      toast.error("Failed to download file");
     }
   };
 
@@ -361,6 +385,7 @@ export function TaskAttachments({ taskId }: TaskAttachmentsProps) {
                         <h4 className="text-sm font-medium text-gray-900 truncate">
                           {attachment.originalName ||
                             attachment.filename ||
+                            (attachment as any).name ||
                             "Unknown file"}
                         </h4>
                       </div>

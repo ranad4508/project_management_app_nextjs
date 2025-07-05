@@ -389,6 +389,7 @@ export class WorkspaceService {
           }
         });
 
+        // Use only effort-based completion rate
         const completionPercentage =
           totalEffort > 0
             ? Math.round((completedEffort / totalEffort) * 100)
@@ -470,13 +471,9 @@ export class WorkspaceService {
     const workspace = await Workspace.findById(workspaceId);
     const activeMembers = workspace?.members.length || 0;
 
-    // Use effort-based completion if available, otherwise fall back to task-based
+    // Use only effort-based completion rate
     const completionRate =
-      totalEffort > 0
-        ? Math.round((completedEffort / totalEffort) * 100)
-        : totalTasks > 0
-        ? Math.round((completedTasks / totalTasks) * 100)
-        : 0;
+      totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
 
     return {
       totalProjects,

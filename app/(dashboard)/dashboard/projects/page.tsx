@@ -196,7 +196,7 @@ export default function ProjectsPage() {
                       <div className="space-y-2">
                         <div className="flex items-center text-sm text-muted-foreground">
                           <Users className="mr-2 h-4 w-4" />
-                          {project.members.length} members
+                          {project.workspace?.members?.length || 0} members
                         </div>
                         {project.dueDate && (
                           <div className="flex items-center text-sm text-muted-foreground">
@@ -214,7 +214,10 @@ export default function ProjectsPage() {
                           </Badge>
                           <div className="flex items-center text-sm">
                             <CheckCircle2 className="mr-1 h-4 w-4 text-green-500" />
-                            {project.stats?.completionPercentage || 0}% complete
+                            {Math.round(
+                              project.stats?.completionPercentage || 0
+                            )}
+                            % complete
                           </div>
                         </div>
                       </div>

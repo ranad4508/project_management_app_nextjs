@@ -68,6 +68,7 @@ export interface Label {
 export interface TaskAttachment {
   _id: string;
   filename: string;
+  name: string;
   originalName: string;
   mimetype: string;
   size: number;
@@ -140,7 +141,16 @@ export const taskApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Task", "Label", "TaskComment", "TaskActivity"],
+  tagTypes: [
+    "Task",
+    "Label",
+    "TaskComment",
+    "TaskActivity",
+    "Project",
+    "ProjectStats",
+    "DashboardStats",
+    "TaskStats",
+  ],
   endpoints: (builder) => ({
     // Task CRUD operations
     createTask: builder.mutation<ApiResponse<Task>, CreateTaskData>({
@@ -198,13 +208,23 @@ export const taskApi = createApi({
         method: "PUT",
         body: data,
       }),
-      invalidatesTags: (_result, _error, { id }) => [
-        { type: "Task", id },
-        "Task",
-      ],
+      invalidatesTags: (_result, _error, { id, data }) => {
+        const tags: any[] = [{ type: "Task", id }, "Task"];
+
+        // If status or completion is being updated, invalidate project-related caches
+        if (data.isCompleted !== undefined || data.status !== undefined) {
+          tags.push("Project");
+          tags.push("ProjectStats");
+          tags.push("DashboardStats");
+          tags.push("TaskStats");
+        }
+
+        return tags;
+      },
       // Optimistic updates for checkbox functionality
       onQueryStarted: async ({ id, data }, { dispatch, queryFulfilled }) => {
         if (data.isCompleted !== undefined || data.status !== undefined) {
+          // Update individual task cache
           const patchResult = dispatch(
             taskApi.util.updateQueryData("getTaskById", id, (draft) => {
               if (draft.success && draft.data) {
@@ -225,8 +245,45 @@ export const taskApi = createApi({
             })
           );
 
+          // Update task lists cache - need to handle different query signatures
+          const updateTaskInList = (draft: any) => {
+            if (draft.success && draft.data?.tasks) {
+              const taskIndex = draft.data.tasks.findIndex(
+                (task: any) => task._id === id
+              );
+              if (taskIndex !== -1) {
+                const task = draft.data.tasks[taskIndex];
+                if (data.isCompleted !== undefined) {
+                  task.isCompleted = data.isCompleted;
+                  task.completionPercentage = data.isCompleted ? 100 : 0;
+                  task.status = data.isCompleted
+                    ? TaskStatus.DONE
+                    : TaskStatus.TODO;
+                }
+                if (data.status !== undefined) {
+                  task.status = data.status;
+                  task.isCompleted = data.status === TaskStatus.DONE;
+                  task.completionPercentage =
+                    data.status === TaskStatus.DONE ? 100 : 0;
+                }
+              }
+            }
+          };
+
+          // Update various task list caches - we'll invalidate instead of optimistic updates
+          // since we don't know all the query parameters that might be in use
+
           try {
             await queryFulfilled;
+
+            // After successful update, trigger SWR revalidation for dashboard data
+            if (typeof window !== "undefined" && window.dispatchEvent) {
+              window.dispatchEvent(
+                new CustomEvent("task-status-updated", {
+                  detail: { taskId: id, data },
+                })
+              );
+            }
           } catch {
             patchResult.undo();
           }

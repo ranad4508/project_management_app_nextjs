@@ -70,7 +70,7 @@ export function TaskBoard({
   const tasks = tasksResponse?.data?.tasks || [];
   const pagination = tasksResponse?.data?.pagination;
 
-  // Calculate project statistics
+  // Calculate project statistics using effort-based completion
   const stats = useMemo(() => {
     const total = tasks.length;
     const completed = tasks.filter(
@@ -84,9 +84,28 @@ export function TaskBoard({
       (task) => task.status === TaskStatus.BLOCKED
     ).length;
 
-    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    // Calculate effort-based progress
+    const totalEffort = tasks.reduce(
+      (sum, task) => sum + (task.estimatedHours || 0),
+      0
+    );
+    const completedEffort = tasks
+      .filter((task) => task.status === TaskStatus.DONE)
+      .reduce((sum, task) => sum + (task.estimatedHours || 0), 0);
 
-    return { total, completed, inProgress, todo, blocked, progress };
+    const progress =
+      totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
+
+    return {
+      total,
+      completed,
+      inProgress,
+      todo,
+      blocked,
+      progress,
+      totalEffort,
+      completedEffort,
+    };
   }, [tasks]);
 
   const handleTaskClick = useCallback(
@@ -157,10 +176,7 @@ export function TaskBoard({
                 variant="secondary"
                 className="bg-green-100 text-green-700"
               >
-                {stats.total > 0
-                  ? Math.round((stats.completed / stats.total) * 100)
-                  : 0}
-                %
+                {stats.progress}%
               </Badge>
             </div>
           </CardContent>

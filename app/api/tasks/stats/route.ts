@@ -37,7 +37,7 @@ export const GET = asyncHandler(async (req: NextRequest) => {
   const nextWeek = new Date(today);
   nextWeek.setDate(nextWeek.getDate() + 7);
 
-  // Get task statistics
+  // Get task statistics and effort data
   const [
     total,
     completed,
@@ -47,6 +47,7 @@ export const GET = asyncHandler(async (req: NextRequest) => {
     dueToday,
     dueTomorrow,
     dueThisWeek,
+    allTasks,
   ] = await Promise.all([
     Task.countDocuments({
       $or: [{ assignedTo: userObjectId }, { project: { $in: projectIds } }],
@@ -86,7 +87,27 @@ export const GET = asyncHandler(async (req: NextRequest) => {
       dueDate: { $gte: today, $lt: nextWeek },
       status: { $ne: TaskStatus.DONE },
     }),
+    Task.find({
+      $or: [{ assignedTo: userObjectId }, { project: { $in: projectIds } }],
+    }).select("estimatedHours status"),
   ]);
+
+  // Calculate effort-based completion
+  let totalEffort = 0;
+  let completedEffort = 0;
+
+  allTasks.forEach((task) => {
+    const effort = task.estimatedHours || 0;
+    totalEffort += effort;
+
+    if (task.status === TaskStatus.DONE) {
+      completedEffort += effort;
+    }
+  });
+
+  // Use only effort-based completion rate
+  const completionRate =
+    totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
 
   const stats = {
     total,
@@ -97,6 +118,9 @@ export const GET = asyncHandler(async (req: NextRequest) => {
     dueToday,
     dueTomorrow,
     dueThisWeek,
+    totalEffort,
+    completedEffort,
+    completionRate,
   };
 
   return NextResponse.json({

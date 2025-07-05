@@ -3,6 +3,7 @@ import { Task } from "@/src/models/task";
 import { Project } from "@/src/models/project";
 import { User } from "@/src/models/user";
 import { Workspace } from "@/src/models/workspace";
+import { Label } from "@/src/models/label"; // Required for mongoose model registration
 import { NotificationService } from "./notification.service";
 import { FileUploadService } from "./file-upload.service";
 import {
@@ -559,9 +560,10 @@ export class TaskService {
       [sortBy]: sortOrder === "asc" ? 1 : -1,
     };
 
-    // First, get all workspaces the user is a member of
+    // First, get all workspaces the user is a member of or owns
+    const userObjectId = new mongoose.Types.ObjectId(userId);
     const workspaces = await Workspace.find({
-      "members.user": userId,
+      $or: [{ owner: userObjectId }, { members: userObjectId }],
     }).select("_id");
 
     const workspaceIds = workspaces.map((w) => w._id);
@@ -619,6 +621,14 @@ export class TaskService {
       .populate("assignedTo", "name email avatar")
       .populate("createdBy", "name email avatar")
       .populate("labels", "name color")
+      .populate({
+        path: "subtasks",
+        populate: [
+          { path: "assignedTo", select: "name email avatar" },
+          { path: "createdBy", select: "name email avatar" },
+          { path: "labels", select: "name color" },
+        ],
+      })
       .sort(sort)
       .skip(skip)
       .limit(limit);

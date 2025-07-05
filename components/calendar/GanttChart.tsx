@@ -34,6 +34,7 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
   // Convert projects and tasks to Gantt format
   const ganttTasks: Task[] = useMemo(() => {
     const ganttData: Task[] = [];
+    const processedTaskIds = new Set<string>(); // Track processed task IDs to avoid duplicates
 
     // Add projects as parent tasks (only if they have valid names and IDs)
     projects
@@ -99,9 +100,14 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
         projectTasks
           .filter(
             (task: any) =>
-              task && task._id && task.title && task.title.trim() !== ""
+              task &&
+              task._id &&
+              task.title &&
+              task.title.trim() !== "" &&
+              !processedTaskIds.has(task._id) // Avoid duplicates
           )
           .forEach((task: any) => {
+            processedTaskIds.add(task._id); // Mark as processed
             const taskStartDate = task.startDate
               ? new Date(task.startDate)
               : task.createdAt
@@ -156,9 +162,11 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
                     subtask &&
                     subtask._id &&
                     subtask.title &&
-                    subtask.title.trim() !== ""
+                    subtask.title.trim() !== "" &&
+                    !processedTaskIds.has(subtask._id) // Avoid duplicates
                 )
                 .forEach((subtask: any) => {
+                  processedTaskIds.add(subtask._id); // Mark as processed
                   const subtaskStartDate = subtask.startDate
                     ? new Date(subtask.startDate)
                     : subtask.createdAt
@@ -307,8 +315,18 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
       const completedTasks = tasks.filter(
         (task) => task.status === TaskStatus.DONE
       ).length;
+
+      // Calculate effort-based completion rate
+      const totalEffort = tasks.reduce(
+        (sum, task) => sum + (task.estimatedHours || 0),
+        0
+      );
+      const completedEffort = tasks
+        .filter((task) => task.status === TaskStatus.DONE)
+        .reduce((sum, task) => sum + (task.estimatedHours || 0), 0);
+
       const completionRate =
-        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
 
       statsDiv.innerHTML = `
         <div style="display: flex; justify-content: space-around; margin-bottom: 30px; font-family: Arial, sans-serif;">

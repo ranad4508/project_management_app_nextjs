@@ -48,9 +48,12 @@ export interface TaskComment {
 
 export interface TaskAttachment {
   name: string;
+  filename?: string;
+  originalName?: string;
   url: string;
-  type: string;
-  size: number;
+  type?: string;
+  mimetype?: string;
+  size?: number;
   uploadedBy: Types.ObjectId;
   uploadedAt: Date;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { useEffect } from "react";
 import { API_ENDPOINTS, fetcher } from "@/lib/swr-config";
 
 // Dashboard stats hook
@@ -54,8 +55,22 @@ export function useDashboardProjects() {
     fetcher,
     {
       refreshInterval: 60000, // Refresh every minute
+      revalidateOnFocus: true, // Revalidate when window gets focus
+      revalidateOnReconnect: true, // Revalidate when reconnecting
     }
   );
+
+  // Listen for task status updates to trigger revalidation
+  useEffect(() => {
+    const handleTaskStatusUpdate = () => {
+      mutate();
+    };
+
+    window.addEventListener("task-status-updated", handleTaskStatusUpdate);
+    return () => {
+      window.removeEventListener("task-status-updated", handleTaskStatusUpdate);
+    };
+  }, [mutate]);
 
   return {
     projects: data?.data || [],
@@ -108,8 +123,22 @@ export function useTaskStats() {
     fetcher,
     {
       refreshInterval: 60000, // Refresh every minute
+      revalidateOnFocus: true, // Revalidate when window gets focus
+      revalidateOnReconnect: true, // Revalidate when reconnecting
     }
   );
+
+  // Listen for task status updates to trigger revalidation
+  useEffect(() => {
+    const handleTaskStatusUpdate = () => {
+      mutate();
+    };
+
+    window.addEventListener("task-status-updated", handleTaskStatusUpdate);
+    return () => {
+      window.removeEventListener("task-status-updated", handleTaskStatusUpdate);
+    };
+  }, [mutate]);
 
   return {
     stats: data?.data || {
@@ -121,6 +150,9 @@ export function useTaskStats() {
       dueToday: 0,
       dueTomorrow: 0,
       dueThisWeek: 0,
+      totalEffort: 0,
+      completedEffort: 0,
+      completionRate: 0,
     },
     isLoading,
     error,
@@ -134,7 +166,7 @@ export function useUserProjects() {
     API_ENDPOINTS.USER_PROJECTS,
     fetcher,
     {
-      refreshInterval: 60000, // Refresh every minute
+      refreshInterval: 6000, // Refresh every minute
     }
   );
 
@@ -152,7 +184,9 @@ export function useUserWorkspaces() {
     API_ENDPOINTS.USER_WORKSPACES,
     fetcher,
     {
-      refreshInterval: 300000, // Refresh every 5 minutes
+      refreshInterval: 6000,
+      revalidateOnFocus: true, // Revalidate when window gets focus
+      revalidateOnReconnect: true, // Revalidate when reconnecting
     }
   );
 
@@ -170,7 +204,7 @@ export function useUserProfile() {
     API_ENDPOINTS.PROFILE,
     fetcher,
     {
-      refreshInterval: 300000, // Refresh every 5 minutes
+      refreshInterval: 6000, // Refresh every 5 minutes
     }
   );
 
@@ -188,7 +222,7 @@ export function useWorkspaceById(workspaceId: string) {
     workspaceId ? API_ENDPOINTS.WORKSPACE_BY_ID(workspaceId) : null,
     fetcher,
     {
-      refreshInterval: 60000, // Refresh every minute
+      refreshInterval: 6000, // Refresh every minute
     }
   );
 
@@ -206,7 +240,7 @@ export function useWorkspaceMembers(workspaceId: string) {
     workspaceId ? API_ENDPOINTS.WORKSPACE_MEMBERS(workspaceId) : null,
     fetcher,
     {
-      refreshInterval: 120000, // Refresh every 2 minutes
+      refreshInterval: 6000, // Refresh every 2 minutes
     }
   );
 
@@ -226,7 +260,7 @@ export function useChatRooms(workspaceId: string) {
     workspaceId ? API_ENDPOINTS.CHAT_ROOMS(workspaceId) : null,
     fetcher,
     {
-      refreshInterval: 30000, // Refresh every 30 seconds
+      refreshInterval: 6000, // Refresh every 30 seconds
     }
   );
 

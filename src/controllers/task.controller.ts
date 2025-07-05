@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { TaskService } from "@/src/services/task.service";
+import "@/src/models/label"; // Ensure Label model is registered
 import {
   validateSchema,
   schemas,
@@ -367,6 +368,18 @@ export class TaskController {
       const { user } = await requireTaskAccess(req, id);
 
       const attachments = await this.taskService.getAttachments(id, user.id);
+
+      // Debug logging for attachments
+      console.log("🔍 Task attachments debug:", {
+        taskId: id,
+        attachmentCount: attachments.length,
+        attachments: attachments.map((att: any) => ({
+          name: att.name,
+          filename: att.filename,
+          originalName: att.originalName,
+          url: att.url,
+        })),
+      });
 
       return NextResponse.json({
         success: true,

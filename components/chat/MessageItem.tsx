@@ -173,7 +173,7 @@ export function MessageItem({
             reactionId: userExistingReaction._id,
             roomId,
           }).unwrap();
-          toast.success("Reaction removed!");
+
           return;
         } else {
           // Different reaction - remove old one first, then add new one
@@ -191,7 +191,6 @@ export function MessageItem({
         type: type as any, // Cast to ReactionType
         roomId,
       }).unwrap();
-      toast.success("Reaction added!");
     } catch (error) {
       console.error("Failed to update reaction:", error);
       toast.error("Failed to update reaction. Please try again.");

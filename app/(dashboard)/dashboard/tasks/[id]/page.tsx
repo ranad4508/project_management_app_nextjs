@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -250,6 +251,25 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleCheckboxChange = async (checked: boolean) => {
+    try {
+      await updateTask({
+        id: taskId,
+        data: {
+          isCompleted: checked,
+          status: checked ? TaskStatus.DONE : TaskStatus.TODO,
+          completionPercentage: checked ? 100 : 0,
+        },
+      }).unwrap();
+
+      toast.success(checked ? "Task completed" : "Task reopened");
+      refetch();
+    } catch (error) {
+      console.error("Failed to update task:", error);
+      toast.error("Failed to update task");
+    }
+  };
+
   const handleDeleteTask = async () => {
     try {
       await deleteTask(taskId).unwrap();
@@ -359,17 +379,28 @@ export default function TaskDetailPage() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{task.title}</h1>
-              <p className="text-gray-600">
-                in{" "}
-                <Link
-                  href={`/dashboard/projects/${task.project._id}`}
-                  className="text-blue-600 hover:text-blue-800"
-                >
-                  {task.project.name}
-                </Link>
-              </p>
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={task.isCompleted}
+                onCheckedChange={(checked) =>
+                  handleCheckboxChange(checked as boolean)
+                }
+                className="w-5 h-5"
+              />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {task.title}
+                </h1>
+                <p className="text-gray-600">
+                  in{" "}
+                  <Link
+                    href={`/dashboard/projects/${task.project._id}`}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    {task.project.name}
+                  </Link>
+                </p>
+              </div>
             </div>
           </div>
 

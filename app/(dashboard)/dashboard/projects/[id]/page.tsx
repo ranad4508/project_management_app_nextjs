@@ -70,12 +70,29 @@ export default function ProjectPage() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isArchiveDialogOpen, setIsArchiveDialogOpen] = useState(false);
 
-  const { data: project, isLoading, error } = useGetProjectByIdQuery(projectId);
+  const {
+    data: project,
+    isLoading,
+    error,
+    refetch: refetchProject,
+  } = useGetProjectByIdQuery(projectId);
   const { data: activities, isLoading: activitiesLoading } =
     useGetProjectActivitiesQuery({
       projectId,
       limit: 20,
     });
+
+  // Listen for task status updates to refresh project data
+  React.useEffect(() => {
+    const handleTaskStatusUpdate = () => {
+      refetchProject();
+    };
+
+    window.addEventListener("task-status-updated", handleTaskStatusUpdate);
+    return () => {
+      window.removeEventListener("task-status-updated", handleTaskStatusUpdate);
+    };
+  }, [refetchProject]);
 
   // Get all tasks to extract attachments
   const { data: tasksResponse } = useGetTasksQuery({

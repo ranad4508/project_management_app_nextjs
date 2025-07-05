@@ -13,6 +13,19 @@ interface ProjectMember {
   avatar?: string;
 }
 
+// Workspace member interface
+interface WorkspaceMember {
+  user: {
+    _id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+  };
+  role: string;
+  joinedAt: string;
+  permissions: string[];
+}
+
 // Project interface
 interface Project {
   _id: string;
@@ -23,6 +36,7 @@ interface Project {
     _id: string;
     name: string;
     slug: string;
+    members?: WorkspaceMember[];
   };
   status: string;
   priority: string;
@@ -99,7 +113,7 @@ export const projectApi = createApi({
         if (params.sortOrder)
           searchParams.append("sortOrder", params.sortOrder);
 
-        return `?${searchParams.toString()}`;
+        return `/user?${searchParams.toString()}`;
       },
       providesTags: ["Project"],
       transformResponse: (response: ApiResponse<ProjectsResponse>) => {
