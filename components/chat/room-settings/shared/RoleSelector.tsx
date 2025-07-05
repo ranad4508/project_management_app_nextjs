@@ -8,20 +8,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { MemberRole } from "@/src/types/chat.types";
+import { MemberRole } from "@/src/enums/user.enum";
 
 import { RoleSelectorProps } from "../types";
 
 const roleLabels: Record<MemberRole, string> = {
-  owner: "Owner",
   admin: "Admin",
+  moderator: "Moderator",
   member: "Member",
+  guest: "Guest",
 };
 
 const roleColors: Record<MemberRole, string> = {
-  owner: "bg-yellow-100 text-yellow-800",
-  admin: "bg-blue-100 text-blue-800",
-  member: "bg-gray-100 text-gray-800",
+  admin: "bg-red-100 text-red-800",
+  moderator: "bg-blue-100 text-blue-800",
+  member: "bg-green-100 text-green-800",
+  guest: "bg-gray-100 text-gray-800",
 };
 
 export default function RoleSelector({
@@ -53,14 +55,10 @@ export default function RoleSelector({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="member">
-          <Badge className={roleColors.member}>
-            {roleLabels.member}
-          </Badge>
+          <Badge className={roleColors.member}>{roleLabels.member}</Badge>
         </SelectItem>
         <SelectItem value="admin">
-          <Badge className={roleColors.admin}>
-            {roleLabels.admin}
-          </Badge>
+          <Badge className={roleColors.admin}>{roleLabels.admin}</Badge>
         </SelectItem>
       </SelectContent>
     </Select>

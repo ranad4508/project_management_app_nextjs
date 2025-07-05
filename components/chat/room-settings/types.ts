@@ -1,4 +1,5 @@
-import { ChatRoom, ChatRoomMember, MemberRole } from "@/src/types/chat.types";
+import { ChatRoom, RoomMember } from "@/src/types/chat.types";
+import { MemberRole } from "@/src/enums/user.enum";
 
 export interface RoomSettingsProps {
   room: ChatRoom;
@@ -27,7 +28,7 @@ export interface TabProps {
 }
 
 export interface MemberCardProps {
-  member: ChatRoomMember;
+  member: RoomMember;
   currentUser: any;
   room: ChatRoom;
   onRemove?: (memberId: string, memberName: string) => void;

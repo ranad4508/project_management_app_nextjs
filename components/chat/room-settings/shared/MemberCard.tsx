@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Crown, UserMinus } from "lucide-react";
-import { MemberRole } from "@/src/types/chat.types";
+import { MemberRole } from "@/src/enums/user.enum";
 
 import RoleSelector from "./RoleSelector";
 import { MemberCardProps } from "../types";
@@ -21,23 +21,19 @@ export default function MemberCard({
   hideRemoveButton = false,
 }: ExtendedMemberCardProps) {
   // Safety checks for member data
-  if (!member || (!member.name && !member.user)) {
+  if (!member || !member.user) {
     return null;
   }
 
-  const memberName =
-    member.name || (member.user && member.user.name) || "Unknown User";
-  const memberEmail =
-    member.email || (member.user && member.user.email) || "No email";
+  const memberName = member.user.name || "Unknown User";
+  const memberEmail = member.user.email || "No email";
   // Always use the user ID, not the member document ID
-  const memberId = (member.user && member.user._id) || member._id || "unknown";
-  const memberAvatar =
-    member.avatar || (member.user && member.user.avatar) || null;
+  const memberId = member.user._id || "unknown";
+  const memberAvatar = member.user.avatar || null;
 
   // Check if this member is the room owner
   const isOwner =
-    member.isOwner ||
-    (member.user && room.createdBy && member.user._id === room.createdBy._id);
+    member.user && room.createdBy && member.user._id === room.createdBy._id;
 
   // Check if current user is the room owner
   const currentUserIsOwner =

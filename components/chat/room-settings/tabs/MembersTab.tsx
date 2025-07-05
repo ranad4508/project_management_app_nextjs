@@ -44,7 +44,7 @@ import { toast } from "sonner";
 
 import MemberCard from "../shared/MemberCard";
 import { TabProps } from "../types";
-import { MemberRole } from "@/src/types/chat.types";
+import { MemberRole } from "@/src/enums/user.enum";
 import { useInviteMemberByEmailMutation } from "@/src/store/api/chatApi";
 
 interface MembersTabProps extends TabProps {
@@ -90,15 +90,14 @@ export default function MembersTab({
     if (checked) {
       const selectableMembers = filteredMembers
         .filter((member) => {
-          const memberId = member._id || (member.user && member.user._id);
+          const memberId = member.user?._id;
           const isOwner =
-            member.isOwner ||
-            (member.user &&
-              room.createdBy &&
-              member.user._id === room.createdBy._id);
+            member.user &&
+            room.createdBy &&
+            member.user._id === room.createdBy._id;
           return memberId !== currentUser?.id && !isOwner; // Can't select self or owner
         })
-        .map((member) => member._id || (member.user && member.user._id))
+        .map((member) => member.user?._id)
         .filter(Boolean);
       setSelectedMembers(selectableMembers);
     } else {
@@ -140,11 +139,8 @@ export default function MembersTab({
     setIsRemoving(true);
     try {
       const promises = selectedMembers.map(async (memberId) => {
-        const member = members.find(
-          (m) => (m._id || (m.user && m.user._id)) === memberId
-        );
-        const memberName =
-          member?.name || (member?.user && member.user.name) || "Unknown";
+        const member = members.find((m) => m.user?._id === memberId);
+        const memberName = member?.user?.name || "Unknown";
 
         if (onMemberRemove) {
           await onMemberRemove(room._id, memberId);
@@ -157,7 +153,7 @@ export default function MembersTab({
       // Update local state
       setMembers((prev) =>
         prev.filter((m) => {
-          const id = m._id || (m.user && m.user._id);
+          const id = m.user?._id;
           return !selectedMembers.includes(id);
         })
       );
@@ -180,9 +176,8 @@ export default function MembersTab({
 
   const filteredMembers = members.filter((member) => {
     if (!member) return false;
-    const memberName = member.name || (member.user && member.user.name) || "";
-    const memberEmail =
-      member.email || (member.user && member.user.email) || "";
+    const memberName = member.user?.name || "";
+    const memberEmail = member.user?.email || "";
     const searchLower = searchTerm.toLowerCase();
     return (
       memberName.toLowerCase().includes(searchLower) ||
@@ -199,7 +194,7 @@ export default function MembersTab({
       // Update local state
       setMembers((prev) =>
         prev.filter((m) => {
-          const id = m._id || (m.user && m.user._id);
+          const id = m.user?._id;
           return id !== memberId;
         })
       );
@@ -225,7 +220,7 @@ export default function MembersTab({
       setMembers((prev) =>
         prev.map((m) => {
           // Always use the user ID, not the member document ID
-          const id = (m.user && m.user._id) || m._id;
+          const id = m.user?._id;
           if (id === memberId) {
             return { ...m, role: newRole };
           }
@@ -244,17 +239,16 @@ export default function MembersTab({
 
   // Calculate selection state
   const selectableMembers = filteredMembers.filter((member) => {
-    const memberId = member._id || (member.user && member.user._id);
+    const memberId = member.user?._id;
     const isMemberOwner =
-      member.isOwner ||
-      (member.user && room.createdBy && member.user._id === room.createdBy._id);
+      member.user && room.createdBy && member.user._id === room.createdBy._id;
     return memberId !== currentUser?.id && !isMemberOwner;
   });
 
   const allSelectableSelected =
     selectableMembers.length > 0 &&
     selectableMembers.every((member) => {
-      const memberId = member._id || (member.user && member.user._id);
+      const memberId = member.user?._id;
       return selectedMembers.includes(memberId);
     });
 
@@ -414,13 +408,11 @@ export default function MembersTab({
             {filteredMembers.length > 0 ? (
               filteredMembers.map((member) => {
                 // Always use the user ID, not the member document ID
-                const memberId =
-                  (member.user && member.user._id) || member._id || "unknown";
+                const memberId = member.user?._id || "unknown";
                 const isMemberOwner =
-                  member.isOwner ||
-                  (member.user &&
-                    room.createdBy &&
-                    member.user._id === room.createdBy._id);
+                  member.user &&
+                  room.createdBy &&
+                  member.user._id === room.createdBy._id;
                 const isCurrentUser = memberId === currentUser?.id;
                 const canSelect =
                   canManageMembers && !isMemberOwner && !isCurrentUser;

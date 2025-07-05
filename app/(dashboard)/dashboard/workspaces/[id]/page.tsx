@@ -290,6 +290,8 @@ export default function WorkspacePage() {
         inProgressTasks: 0,
         overdueTasks: 0,
         completionPercentage: project.stats?.completionPercentage || 0,
+        totalEffort: project.stats?.totalEffort || 0,
+        completedEffort: project.stats?.completedEffort || 0,
       },
     };
   };

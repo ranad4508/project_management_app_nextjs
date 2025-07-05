@@ -1,4 +1,4 @@
-import { MemberRole } from "@/src/types/chat.types";
+import { MemberRole } from "@/src/enums/user.enum";
 
 const API_BASE = "/api/chat/rooms";
 
