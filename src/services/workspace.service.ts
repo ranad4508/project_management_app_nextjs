@@ -18,6 +18,7 @@ import {
 import { WorkspaceStatus } from "@/src/enums/workspace.enum";
 import { MemberRole } from "@/src/enums/user.enum";
 import { InvitationStatus } from "@/src/enums/invitation.enum";
+import { TaskStatus } from "@/src/enums/task.enum";
 import { RoomType } from "@/src/types/chat.types";
 import type {
   CreateWorkspaceData,
@@ -351,11 +352,26 @@ export class WorkspaceService {
     // Get projects with effort-based completion calculation
     const projectsWithStats = await Promise.all(
       projects.map(async (project) => {
-        const [totalTasks, completedTasks, allTasks] = await Promise.all([
+        const [
+          totalTasks,
+          completedTasks,
+          inProgressTasks,
+          overdueTasks,
+          allTasks,
+        ] = await Promise.all([
           Task.countDocuments({ project: project._id }),
           Task.countDocuments({
             project: project._id,
-            status: "done",
+            status: TaskStatus.DONE,
+          }),
+          Task.countDocuments({
+            project: project._id,
+            status: TaskStatus.IN_PROGRESS,
+          }),
+          Task.countDocuments({
+            project: project._id,
+            dueDate: { $lt: new Date() },
+            status: { $nin: [TaskStatus.DONE, TaskStatus.CANCELLED] },
           }),
           Task.find({ project: project._id }).select("estimatedHours status"),
         ]);
@@ -368,7 +384,7 @@ export class WorkspaceService {
           const effort = task.estimatedHours || 0;
           totalEffort += effort;
 
-          if (task.status === "done") {
+          if (task.status === TaskStatus.DONE) {
             completedEffort += effort;
           }
         });
@@ -392,6 +408,8 @@ export class WorkspaceService {
             completionPercentage,
             totalTasks,
             completedTasks,
+            inProgressTasks,
+            overdueTasks,
             totalEffort,
             completedEffort,
           },
@@ -412,20 +430,53 @@ export class WorkspaceService {
    * Get workspace statistics
    */
   private async getWorkspaceStats(workspaceId: string) {
-    const [totalProjects, totalTasks, completedTasks, overdueTasks] =
+    // First get all projects in this workspace
+    const projects = await Project.find({ workspace: workspaceId }).select(
+      "_id"
+    );
+    const projectIds = projects.map((p) => p._id);
+
+    const [totalProjects, totalTasks, completedTasks, overdueTasks, allTasks] =
       await Promise.all([
         Project.countDocuments({ workspace: workspaceId }),
-        Task.countDocuments({ workspace: workspaceId }),
-        Task.countDocuments({ workspace: workspaceId, status: "done" }),
+        Task.countDocuments({ project: { $in: projectIds } }),
         Task.countDocuments({
-          workspace: workspaceId,
-          dueDate: { $lt: new Date() },
-          status: { $ne: "done" },
+          project: { $in: projectIds },
+          status: TaskStatus.DONE,
         }),
+        Task.countDocuments({
+          project: { $in: projectIds },
+          dueDate: { $lt: new Date() },
+          status: { $ne: TaskStatus.DONE },
+        }),
+        Task.find({ project: { $in: projectIds } }).select(
+          "estimatedHours status"
+        ),
       ]);
+
+    // Calculate effort-based completion
+    let totalEffort = 0;
+    let completedEffort = 0;
+
+    allTasks.forEach((task) => {
+      const effort = task.estimatedHours || 0;
+      totalEffort += effort;
+
+      if (task.status === TaskStatus.DONE) {
+        completedEffort += effort;
+      }
+    });
 
     const workspace = await Workspace.findById(workspaceId);
     const activeMembers = workspace?.members.length || 0;
+
+    // Use effort-based completion if available, otherwise fall back to task-based
+    const completionRate =
+      totalEffort > 0
+        ? Math.round((completedEffort / totalEffort) * 100)
+        : totalTasks > 0
+        ? Math.round((completedTasks / totalTasks) * 100)
+        : 0;
 
     return {
       totalProjects,
@@ -433,8 +484,7 @@ export class WorkspaceService {
       completedTasks,
       overdueTasks,
       activeMembers,
-      completionRate:
-        totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      completionRate,
     };
   }
 

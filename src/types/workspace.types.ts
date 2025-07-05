@@ -40,6 +40,10 @@ export interface WorkspaceProject {
     completionPercentage: number;
     totalTasks: number;
     completedTasks: number;
+    inProgressTasks: number;
+    overdueTasks: number;
+    totalEffort: number;
+    completedEffort: number;
   };
   createdAt: Date;
   updatedAt: Date;

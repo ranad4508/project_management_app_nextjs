@@ -43,11 +43,26 @@ export const GET = asyncHandler(async (req: NextRequest) => {
   // Calculate completion rates for each project based on effort
   const projectsWithStats = await Promise.all(
     projects.map(async (project) => {
-      const [totalTasks, completedTasks, allTasks] = await Promise.all([
+      const [
+        totalTasks,
+        completedTasks,
+        inProgressTasks,
+        overdueTasks,
+        allTasks,
+      ] = await Promise.all([
         Task.countDocuments({ project: project._id }),
         Task.countDocuments({
           project: project._id,
           status: TaskStatus.DONE,
+        }),
+        Task.countDocuments({
+          project: project._id,
+          status: TaskStatus.IN_PROGRESS,
+        }),
+        Task.countDocuments({
+          project: project._id,
+          dueDate: { $lt: new Date() },
+          status: { $nin: [TaskStatus.DONE, TaskStatus.CANCELLED] },
         }),
         Task.find({ project: project._id }).select("estimatedHours status"),
       ]);
@@ -73,7 +88,9 @@ export const GET = asyncHandler(async (req: NextRequest) => {
         stats: {
           totalTasks,
           completedTasks,
-          completionRate,
+          inProgressTasks,
+          overdueTasks,
+          completionPercentage: completionRate,
           totalEffort,
           completedEffort,
         },

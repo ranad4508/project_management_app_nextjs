@@ -280,13 +280,8 @@ function ProjectCard({ project }: ProjectCardProps) {
     }
   };
 
-  // Calculate completion rate from actual task data
-  const completionRate =
-    project.stats?.totalTasks > 0
-      ? Math.round(
-          (project.stats.completedTasks / project.stats.totalTasks) * 100
-        )
-      : project.stats?.completionPercentage || 0;
+  // Use effort-based completion rate if available, otherwise fall back to task-based
+  const completionRate = project.stats?.completionPercentage || 0;
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -315,10 +310,18 @@ function ProjectCard({ project }: ProjectCardProps) {
           <Progress value={completionRate} className="h-2" />
 
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {project.stats?.completedTasks || 0} /{" "}
-              {project.stats?.totalTasks || 0} tasks
-            </span>
+            <div className="flex flex-col gap-1">
+              <span>
+                {project.stats?.completedTasks || 0} /{" "}
+                {project.stats?.totalTasks || 0} tasks
+              </span>
+              {project.stats?.totalEffort && project.stats.totalEffort > 0 && (
+                <span>
+                  {project.stats.completedEffort || 0} /{" "}
+                  {project.stats.totalEffort} hours effort
+                </span>
+              )}
+            </div>
             <span>{project.workspace?.members?.length || 0} members</span>
           </div>
         </div>

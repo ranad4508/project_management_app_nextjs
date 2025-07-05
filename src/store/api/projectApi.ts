@@ -38,6 +38,8 @@ interface Project {
     inProgressTasks: number;
     overdueTasks: number;
     completionPercentage: number;
+    totalEffort: number;
+    completedEffort: number;
   };
   createdAt: string;
   updatedAt: string;

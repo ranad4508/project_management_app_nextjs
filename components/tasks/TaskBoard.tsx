@@ -215,25 +215,6 @@ export function TaskBoard({
         </Card>
       </div>
 
-      {/* Progress Bar */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Project Progress
-            </h3>
-            <span className="text-sm font-medium text-gray-600">
-              {stats.progress}% Complete
-            </span>
-          </div>
-          <Progress value={stats.progress} className="h-3" />
-          <div className="flex justify-between text-xs text-gray-500 mt-2">
-            <span>{stats.completed} completed</span>
-            <span>{stats.total - stats.completed} remaining</span>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Filters and Controls */}
       <div className="flex items-center justify-between bg-white p-4 rounded-lg border">
         <div className="flex items-center space-x-4">
