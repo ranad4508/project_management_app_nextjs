@@ -30,7 +30,6 @@ WorkSphere streamlines team collaboration, task management, and communication in
 - [🔐 Security Features](#-security-features)
 - [🧪 Testing](#-testing)
 - [🚀 Deployment](#-deployment)
-- [📚 API Documentation](#-api-documentation)
 - [🤝 Contributing](#-contributing)
 - [💬 Support](#-support)
 - [📄 License](#-license)
@@ -200,31 +199,6 @@ npm run test:coverage
 npm run build
 npm start
 ```
-
----
-
-## 📚 API Documentation
-
-### 🔐 Auth
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/verify-email`
-- `POST /api/auth/forgot-password`
-- `POST /api/auth/reset-password`
-- `POST /api/auth/mfa/enable`
-- `POST /api/auth/mfa/verify`
-- `POST /api/auth/mfa/disable`
-
-### 🏢 Workspaces
-
-- `GET /api/workspaces`
-- `POST /api/workspaces`
-- `GET /api/workspaces/:id`
-- `PUT /api/workspaces/:id`
-- `DELETE /api/workspaces/:id`
-- `POST /api/workspaces/:id/members`
-- `GET /api/workspaces/:id/members`
 
 ---
 
