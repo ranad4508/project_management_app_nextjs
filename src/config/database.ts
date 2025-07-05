@@ -1,8 +1,8 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
 interface DatabaseConfig {
-  uri: string
-  options: mongoose.ConnectOptions
+  uri: string;
+  options: mongoose.ConnectOptions;
 }
 
 const config: DatabaseConfig = {
@@ -14,54 +14,60 @@ const config: DatabaseConfig = {
     socketTimeoutMS: 45000,
     family: 4,
   },
-}
+};
 
 class Database {
-  private static instance: Database
-  private isConnected = false
+  private static instance: Database;
 
   private constructor() {}
 
   public static getInstance(): Database {
     if (!Database.instance) {
-      Database.instance = new Database()
+      Database.instance = new Database();
     }
-    return Database.instance
+    return Database.instance;
   }
 
   public async connect(): Promise<void> {
-    if (this.isConnected) {
-      return
+    // Check if mongoose is already connected
+    if (mongoose.connection.readyState === 1) {
+      return;
+    }
+
+    // If connection is in progress, wait for it
+    if (mongoose.connection.readyState === 2) {
+      await new Promise((resolve) => {
+        mongoose.connection.once("connected", resolve);
+      });
+      return;
     }
 
     try {
-      await mongoose.connect(config.uri, config.options)
-      this.isConnected = true
-      console.log("✅ Database connected successfully")
+      await mongoose.connect(config.uri, config.options);
+      console.log("✅ Database connected successfully");
     } catch (error) {
-      console.error("❌ Database connection failed:", error)
-      throw error
+      console.error("❌ Database connection failed:", error);
+      throw error;
     }
   }
 
   public async disconnect(): Promise<void> {
-    if (!this.isConnected) {
-      return
+    if (mongoose.connection.readyState === 0) {
+      return;
     }
 
     try {
-      await mongoose.disconnect()
-      this.isConnected = false
-      console.log("✅ Database disconnected successfully")
+      await mongoose.disconnect();
+      console.log("✅ Database disconnected successfully");
     } catch (error) {
-      console.error("❌ Database disconnection failed:", error)
-      throw error
+      console.error("❌ Database disconnection failed:", error);
+      throw error;
     }
   }
 
   public getConnectionStatus(): boolean {
-    return this.isConnected
+    return mongoose.connection.readyState === 1;
   }
 }
 
-export default Database.getInstance()
+export default Database.getInstance();
