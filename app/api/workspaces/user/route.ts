@@ -54,7 +54,7 @@ export const GET = asyncHandler(async (req: NextRequest) => {
         }),
         Task.countDocuments({
           project: { $in: projectIds },
-          status: "completed",
+          status: "done",
         }),
       ]);
 

@@ -219,6 +219,17 @@ export default function TaskDetailPage() {
         }
       }
 
+      // Prevent assignment if task is completed
+      if (
+        field === "assignedTo" &&
+        value &&
+        value !== "unassigned" &&
+        (task?.status === TaskStatus.DONE || task?.isCompleted)
+      ) {
+        toast.error("Cannot assign completed tasks to members");
+        return;
+      }
+
       await updateTask({
         id: taskId,
         data: { [field]: value },

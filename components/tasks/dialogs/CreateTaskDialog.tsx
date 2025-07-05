@@ -130,6 +130,16 @@ export function CreateTaskDialog({
 
   const onSubmit = async (data: CreateTaskForm) => {
     try {
+      // Prevent assignment if task is being created as completed
+      if (
+        data.assignedTo &&
+        data.assignedTo !== "unassigned" &&
+        data.status === "done"
+      ) {
+        toast.error("Cannot assign completed tasks to members");
+        return;
+      }
+
       await createTask({
         ...data,
         projectId,

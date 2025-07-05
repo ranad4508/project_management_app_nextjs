@@ -91,6 +91,11 @@ export class TaskService {
       }
     }
 
+    // Prevent assignment if task is being created as completed
+    if (assignedTo && status === TaskStatus.DONE) {
+      throw new ValidationError("Cannot assign completed tasks to members");
+    }
+
     // Determine status type based on status
     const statusType = this.getStatusTypeFromStatus(status);
 
@@ -344,6 +349,14 @@ export class TaskService {
     // Validate assignee
     if (data.assignedTo && !workspace.isMember(data.assignedTo)) {
       throw new ValidationError("Assignee must be a workspace member");
+    }
+
+    // Prevent assignment if task is completed
+    if (
+      data.assignedTo &&
+      (task.status === TaskStatus.DONE || task.isCompleted)
+    ) {
+      throw new ValidationError("Cannot assign completed tasks to members");
     }
 
     // Handle status change

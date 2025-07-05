@@ -396,11 +396,11 @@ export class WorkspaceService {
       await Promise.all([
         Project.countDocuments({ workspace: workspaceId }),
         Task.countDocuments({ workspace: workspaceId }),
-        Task.countDocuments({ workspace: workspaceId, status: "completed" }),
+        Task.countDocuments({ workspace: workspaceId, status: "done" }),
         Task.countDocuments({
           workspace: workspaceId,
           dueDate: { $lt: new Date() },
-          status: { $ne: "completed" },
+          status: { $ne: "done" },
         }),
       ]);
 
