@@ -14,6 +14,8 @@ export interface ProjectStats {
   inProgressTasks: number;
   overdueTasks: number;
   completionPercentage: number;
+  totalEffort: number;
+  completedEffort: number;
 }
 
 export interface Project {

@@ -56,17 +56,25 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
           endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // Add 7 days
         }
 
-        // Calculate project progress based on tasks
+        // Calculate project progress based on effort
         const projectTasks = tasks.filter(
           (task: any) => task.project && task.project._id === project._id
         );
-        const completedTasks = projectTasks.filter(
-          (task: any) => task.status === TaskStatus.DONE
-        );
+
+        let totalEffort = 0;
+        let completedEffort = 0;
+
+        projectTasks.forEach((task: any) => {
+          const effort = task.estimatedHours || 0;
+          totalEffort += effort;
+
+          if (task.status === TaskStatus.DONE) {
+            completedEffort += effort;
+          }
+        });
+
         const progress =
-          projectTasks.length > 0
-            ? (completedTasks.length / projectTasks.length) * 100
-            : 0;
+          totalEffort > 0 ? (completedEffort / totalEffort) * 100 : 0;
 
         ganttData.push({
           start: startDate,

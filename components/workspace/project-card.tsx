@@ -117,6 +117,26 @@ export function ProjectCard({
     return project.completedTasks || 0;
   };
 
+  // Get total effort from project stats
+  const getTotalEffort = () => {
+    if ("stats" in project && project.stats && "totalEffort" in project.stats) {
+      return project.stats.totalEffort;
+    }
+    return 0;
+  };
+
+  // Get completed effort from project stats
+  const getCompletedEffort = () => {
+    if (
+      "stats" in project &&
+      project.stats &&
+      "completedEffort" in project.stats
+    ) {
+      return project.stats.completedEffort;
+    }
+    return 0;
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -222,9 +242,16 @@ export function ProjectCard({
           />
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            {getCompletedTasks()}/{getTotalTasks()} tasks
-          </span>
+          <div className="flex flex-col gap-1">
+            <span>
+              {getCompletedTasks()}/{getTotalTasks()} tasks
+            </span>
+            {getTotalEffort() > 0 && (
+              <span>
+                {getCompletedEffort()}/{getTotalEffort()} hours effort
+              </span>
+            )}
+          </div>
           {project.dueDate && (
             <span>Due {new Date(project.dueDate).toLocaleDateString()}</span>
           )}

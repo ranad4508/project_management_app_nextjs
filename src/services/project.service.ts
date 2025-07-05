@@ -341,8 +341,25 @@ export class ProjectService {
         }),
       ]);
 
+    // Calculate effort-based completion percentage
+    const allTasks = await Task.find({ project: projectId }).select(
+      "estimatedHours status"
+    );
+
+    let totalEffort = 0;
+    let completedEffort = 0;
+
+    allTasks.forEach((task) => {
+      const effort = task.estimatedHours || 0;
+      totalEffort += effort;
+
+      if (task.status === TaskStatus.DONE) {
+        completedEffort += effort;
+      }
+    });
+
     const completionPercentage =
-      totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      totalEffort > 0 ? Math.round((completedEffort / totalEffort) * 100) : 0;
 
     return {
       totalTasks,
@@ -350,6 +367,8 @@ export class ProjectService {
       inProgressTasks,
       overdueTasks,
       completionPercentage,
+      totalEffort,
+      completedEffort,
     };
   }
 

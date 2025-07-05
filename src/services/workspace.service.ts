@@ -348,14 +348,35 @@ export class WorkspaceService {
       .sort({ updatedAt: -1 })
       .limit(10);
 
-    // Get projects with task counts
+    // Get projects with effort-based completion calculation
     const projectsWithStats = await Promise.all(
       projects.map(async (project) => {
-        const totalTasks = await Task.countDocuments({ project: project._id });
-        const completedTasks = await Task.countDocuments({
-          project: project._id,
-          status: "completed",
+        const [totalTasks, completedTasks, allTasks] = await Promise.all([
+          Task.countDocuments({ project: project._id }),
+          Task.countDocuments({
+            project: project._id,
+            status: "done",
+          }),
+          Task.find({ project: project._id }).select("estimatedHours status"),
+        ]);
+
+        // Calculate effort-based completion
+        let totalEffort = 0;
+        let completedEffort = 0;
+
+        allTasks.forEach((task) => {
+          const effort = task.estimatedHours || 0;
+          totalEffort += effort;
+
+          if (task.status === "done") {
+            completedEffort += effort;
+          }
         });
+
+        const completionPercentage =
+          totalEffort > 0
+            ? Math.round((completedEffort / totalEffort) * 100)
+            : 0;
 
         return {
           _id: project._id.toString(),
@@ -368,12 +389,11 @@ export class WorkspaceService {
           assignedTo: project.members || [],
           dueDate: project.dueDate,
           stats: {
-            completionPercentage:
-              totalTasks > 0
-                ? Math.round((completedTasks / totalTasks) * 100)
-                : 0,
+            completionPercentage,
             totalTasks,
             completedTasks,
+            totalEffort,
+            completedEffort,
           },
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
