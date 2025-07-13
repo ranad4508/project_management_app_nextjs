@@ -13,8 +13,7 @@ http://localhost:3000
 ## Authentication
 
 All authenticated endpoints require a valid session cookie. Use the login endpoint first to establish a session.
-Cookie: next-auth.
-session-token=your_session_token_here
+Cookie: next-auth.session-token=your_jwt_token_here
 Content-Type: application/json
 
 ### POST /api/auth/register

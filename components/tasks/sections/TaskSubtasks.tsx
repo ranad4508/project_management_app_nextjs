@@ -105,7 +105,6 @@ export function TaskSubtasks({
           );
 
           onTaskUpdate();
-          toast.success("All subtasks completed automatically");
         } catch (error) {
           console.error("Failed to auto-complete subtasks:", error);
           toast.error("Failed to auto-complete some subtasks");
