@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { ChatService } from "@/src/services/chat.service";
-import { KeyManagementService } from "@/src/services/key-management.service";
+// import { KeyManagementService } from "@/src/services/key-management.service";
 import { requireAuth } from "@/src/middleware/auth.middleware";
 import { asyncHandler } from "@/src/errors/errorHandler";
 import type { ApiResponse } from "@/src/types/api.types";
@@ -183,24 +183,6 @@ export class ChatController {
       return NextResponse.json({
         success: true,
         message: "Conversation deleted from your view successfully",
-      });
-    }
-  );
-
-  deleteRoom = asyncHandler(
-    async (
-      req: NextRequest,
-      context: { params: Promise<{ roomId: string }> }
-    ): Promise<NextResponse<ApiResponse>> => {
-      const user = await requireAuth(req);
-      const params = await context.params;
-      const { roomId } = params;
-
-      await this.chatService.deleteRoom(roomId, user.id);
-
-      return NextResponse.json({
-        success: true,
-        message: "Room deleted successfully",
       });
     }
   );
