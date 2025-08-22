@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { TaskStatus, TaskPriority } from "@/src/enums/task.enum";
 import { ProjectStatus } from "@/src/enums/project.enum";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, Route, Clock } from "lucide-react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import toast from "react-hot-toast";
@@ -29,14 +29,140 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Month);
   const [isChecked, setIsChecked] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [showCriticalPath, setShowCriticalPath] = useState(true);
   const ganttRef = useRef<HTMLDivElement>(null);
 
-  // Convert projects and tasks to Gantt format
+  // Enhanced task processing with dependency management and critical path calculation
   const ganttTasks: Task[] = useMemo(() => {
     const ganttData: Task[] = [];
-    const processedTaskIds = new Set<string>(); // Track processed task IDs to avoid duplicates
+    const processedTaskIds = new Set<string>();
+    const taskDependencies = new Map<string, string[]>(); // taskId -> [dependentTaskIds]
+    const criticalPathTasks = new Set<string>();
 
-    // Add projects as parent tasks (only if they have valid names and IDs)
+    // Calculate critical path
+    const calculateCriticalPath = (tasks: any[]) => {
+      const taskMap = new Map();
+      const inDegree = new Map();
+      const duration = new Map();
+
+      // Initialize task data
+      tasks.forEach((task) => {
+        if (task && task._id) {
+          taskMap.set(task._id, task);
+          inDegree.set(task._id, 0);
+
+          // Calculate duration in days
+          const start = task.startDate ? new Date(task.startDate) : new Date();
+          const end = task.dueDate
+            ? new Date(task.dueDate)
+            : new Date(start.getTime() + 24 * 60 * 60 * 1000);
+          const durationDays = Math.max(
+            1,
+            Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
+          );
+          duration.set(task._id, durationDays);
+        }
+      });
+
+      // Build dependency graph based on task order and relationships
+      tasks.forEach((task, index) => {
+        if (task && task._id && index > 0) {
+          const prevTask = tasks[index - 1];
+          if (prevTask && prevTask._id) {
+            if (!taskDependencies.has(task._id)) {
+              taskDependencies.set(task._id, []);
+            }
+            taskDependencies.get(task._id)!.push(prevTask._id);
+            inDegree.set(task._id, (inDegree.get(task._id) || 0) + 1);
+          }
+        }
+      });
+
+      // Find critical path using longest path algorithm
+      const longestPath = new Map();
+      const queue = [];
+
+      // Initialize with tasks that have no dependencies
+      for (const [taskId, degree] of inDegree) {
+        if (degree === 0) {
+          queue.push(taskId);
+          longestPath.set(taskId, duration.get(taskId) || 0);
+        }
+      }
+
+      // Process tasks in topological order
+      while (queue.length > 0) {
+        const currentTask = queue.shift()!;
+
+        // Update dependent tasks
+        tasks.forEach((task) => {
+          if (task && task._id && taskDependencies.has(task._id)) {
+            const deps = taskDependencies.get(task._id)!;
+            if (deps.includes(currentTask)) {
+              const newPath =
+                (longestPath.get(currentTask) || 0) +
+                (duration.get(task._id) || 0);
+              longestPath.set(
+                task._id,
+                Math.max(longestPath.get(task._id) || 0, newPath)
+              );
+
+              inDegree.set(task._id, inDegree.get(task._id)! - 1);
+              if (inDegree.get(task._id) === 0) {
+                queue.push(task._id);
+              }
+            }
+          }
+        });
+      }
+
+      // Find the maximum path length
+      let maxPath = 0;
+      let endTask = null;
+      for (const [taskId, pathLength] of longestPath) {
+        if (pathLength > maxPath) {
+          maxPath = pathLength;
+          endTask = taskId;
+        }
+      }
+
+      // Backtrack to find critical path
+      if (endTask) {
+        const criticalTasks = new Set([endTask]);
+        let current = endTask;
+
+        while (current) {
+          let found = false;
+          for (const [taskId, deps] of taskDependencies) {
+            if (deps.includes(current)) {
+              const expectedPath =
+                (longestPath.get(current) || 0) - (duration.get(taskId) || 0);
+              if (
+                Math.abs((longestPath.get(taskId) || 0) - expectedPath) < 0.1
+              ) {
+                criticalTasks.add(taskId);
+                current = taskId;
+                found = true;
+                break;
+              }
+            }
+          }
+          if (!found) break;
+        }
+
+        return criticalTasks;
+      }
+
+      return new Set();
+    };
+
+    // Calculate critical path for all tasks
+    const allTasks = projects.flatMap((project) =>
+      tasks.filter((task) => task.project && task.project._id === project._id)
+    );
+    const criticalPath = calculateCriticalPath(allTasks);
+
+    // Add projects as parent tasks
     projects
       .filter(
         (project: any) =>
@@ -52,12 +178,10 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
           ? new Date(project.dueDate)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        // Ensure end date is after start date
         if (endDate <= startDate) {
-          endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // Add 7 days
+          endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
         }
 
-        // Calculate project progress based on effort
         const projectTasks = tasks.filter(
           (task: any) => task.project && task.project._id === project._id
         );
@@ -96,7 +220,7 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
           },
         });
 
-        // Add tasks under each project (only if they have valid titles and IDs)
+        // Enhanced task processing with dependencies and critical path highlighting
         projectTasks
           .filter(
             (task: any) =>
@@ -104,10 +228,10 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
               task._id &&
               task.title &&
               task.title.trim() !== "" &&
-              !processedTaskIds.has(task._id) // Avoid duplicates
+              !processedTaskIds.has(task._id)
           )
-          .forEach((task: any) => {
-            processedTaskIds.add(task._id); // Mark as processed
+          .forEach((task: any, index: number) => {
+            processedTaskIds.add(task._id);
             const taskStartDate = task.startDate
               ? new Date(task.startDate)
               : task.createdAt
@@ -115,14 +239,12 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
               : startDate;
             let taskEndDate = task.dueDate ? new Date(task.dueDate) : endDate;
 
-            // Ensure task end date is after start date
             if (taskEndDate <= taskStartDate) {
               taskEndDate = new Date(
                 taskStartDate.getTime() + 24 * 60 * 60 * 1000
-              ); // Add 1 day
+              );
             }
 
-            // Calculate task progress based on actual status
             const taskProgress =
               task.status === TaskStatus.DONE
                 ? 100
@@ -134,6 +256,13 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
                 ? 25
                 : 0;
 
+            // Check if task is on critical path
+            const isOnCriticalPath = criticalPath.has(task._id);
+
+            // Set dependencies for sequential tasks
+            const dependencies =
+              index > 0 ? [`task-${projectTasks[index - 1]._id}`] : undefined;
+
             ganttData.push({
               start: taskStartDate,
               end: taskEndDate,
@@ -142,19 +271,29 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
               type: "task",
               progress: taskProgress,
               project: `project-${project._id}`,
+              dependencies: dependencies,
               isDisabled: false,
               styles: {
-                progressColor: getTaskColor(task.status || "todo"),
-                progressSelectedColor: getTaskColor(task.status || "todo"),
-                backgroundColor: getTaskColor(task.status || "todo", 0.3),
-                backgroundSelectedColor: getTaskColor(
-                  task.status || "todo",
-                  0.5
-                ),
+                progressColor:
+                  isOnCriticalPath && showCriticalPath
+                    ? "#f97316" // Orange for critical path
+                    : getTaskColor(task.status || "todo"),
+                progressSelectedColor:
+                  isOnCriticalPath && showCriticalPath
+                    ? "#ea580c"
+                    : getTaskColor(task.status || "todo"),
+                backgroundColor:
+                  isOnCriticalPath && showCriticalPath
+                    ? "rgba(249, 115, 22, 0.3)"
+                    : getTaskColor(task.status || "todo", 0.3),
+                backgroundSelectedColor:
+                  isOnCriticalPath && showCriticalPath
+                    ? "rgba(249, 115, 22, 0.5)"
+                    : getTaskColor(task.status || "todo", 0.5),
               },
             });
 
-            // Add subtasks (only if they have valid titles and IDs)
+            // Add subtasks with enhanced styling
             if (task.subtasks && task.subtasks.length > 0) {
               task.subtasks
                 .filter(
@@ -163,10 +302,10 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
                     subtask._id &&
                     subtask.title &&
                     subtask.title.trim() !== "" &&
-                    !processedTaskIds.has(subtask._id) // Avoid duplicates
+                    !processedTaskIds.has(subtask._id)
                 )
-                .forEach((subtask: any) => {
-                  processedTaskIds.add(subtask._id); // Mark as processed
+                .forEach((subtask: any, subIndex: number) => {
+                  processedTaskIds.add(subtask._id);
                   const subtaskStartDate = subtask.startDate
                     ? new Date(subtask.startDate)
                     : subtask.createdAt
@@ -176,11 +315,10 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
                     ? new Date(subtask.dueDate)
                     : taskEndDate;
 
-                  // Ensure subtask end date is after start date
                   if (subtaskEndDate <= subtaskStartDate) {
                     subtaskEndDate = new Date(
                       subtaskStartDate.getTime() + 24 * 60 * 60 * 1000
-                    ); // Add 1 day
+                    );
                   }
 
                   const subtaskProgress =
@@ -202,6 +340,10 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
                     type: "task",
                     progress: subtaskProgress,
                     project: `task-${task._id}`,
+                    dependencies:
+                      subIndex > 0
+                        ? [`subtask-${task.subtasks[subIndex - 1]._id}`]
+                        : [`task-${task._id}`],
                     isDisabled: false,
                     styles: {
                       progressColor: getTaskColor(subtask.status || "todo"),
@@ -224,15 +366,15 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
       });
 
     return ganttData;
-  }, [tasks, projects]);
+  }, [tasks, projects, showCriticalPath]);
 
   // Color functions
   function getProjectColor(status: string, opacity: number = 1) {
     const colors = {
-      [ProjectStatus.ACTIVE]: `rgba(59, 130, 246, ${opacity})`, // Blue
-      [ProjectStatus.ON_HOLD]: `rgba(245, 158, 11, ${opacity})`, // Yellow
-      [ProjectStatus.COMPLETED]: `rgba(16, 185, 129, ${opacity})`, // Green
-      [ProjectStatus.ARCHIVED]: `rgba(239, 68, 68, ${opacity})`, // Red
+      [ProjectStatus.ACTIVE]: `rgba(59, 130, 246, ${opacity})`,
+      [ProjectStatus.ON_HOLD]: `rgba(245, 158, 11, ${opacity})`,
+      [ProjectStatus.COMPLETED]: `rgba(16, 185, 129, ${opacity})`,
+      [ProjectStatus.ARCHIVED]: `rgba(239, 68, 68, ${opacity})`,
     };
     return (
       colors[status as keyof typeof colors] || `rgba(107, 114, 128, ${opacity})`
@@ -241,11 +383,11 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
 
   function getTaskColor(status: string, opacity: number = 1) {
     const colors = {
-      [TaskStatus.TODO]: `rgba(107, 114, 128, ${opacity})`, // Gray
-      [TaskStatus.IN_PROGRESS]: `rgba(59, 130, 246, ${opacity})`, // Blue
-      [TaskStatus.IN_REVIEW]: `rgba(245, 158, 11, ${opacity})`, // Yellow
-      [TaskStatus.DONE]: `rgba(16, 185, 129, ${opacity})`, // Green
-      [TaskStatus.BLOCKED]: `rgba(239, 68, 68, ${opacity})`, // Red
+      [TaskStatus.TODO]: `rgba(107, 114, 128, ${opacity})`,
+      [TaskStatus.IN_PROGRESS]: `rgba(59, 130, 246, ${opacity})`,
+      [TaskStatus.IN_REVIEW]: `rgba(245, 158, 11, ${opacity})`,
+      [TaskStatus.DONE]: `rgba(16, 185, 129, ${opacity})`,
+      [TaskStatus.BLOCKED]: `rgba(239, 68, 68, ${opacity})`,
     };
     return (
       colors[status as keyof typeof colors] || `rgba(107, 114, 128, ${opacity})`
@@ -519,8 +661,21 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Gantt Chart</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Route className="w-5 h-5" />
+            Project Timeline - Gantt Chart
+          </CardTitle>
           <div className="flex items-center gap-4">
+            {/* Added critical path toggle */}
+            <Button
+              variant={showCriticalPath ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowCriticalPath(!showCriticalPath)}
+              className="flex items-center gap-2"
+            >
+              <Clock className="w-4 h-4" />
+              Critical Path
+            </Button>
             <Button
               variant="outline"
               onClick={exportToPDF}
@@ -555,6 +710,25 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
             </Select>
           </div>
         </div>
+        {/* Added legend for critical path and task status */}
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-2 bg-orange-500 rounded"></div>
+            <span>Critical Path</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-2 bg-blue-500 rounded"></div>
+            <span>In Progress</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-2 bg-green-500 rounded"></div>
+            <span>Completed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-2 bg-gray-500 rounded"></div>
+            <span>Pending</span>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {ganttTasks.length > 0 ? (
@@ -567,25 +741,29 @@ export function GanttChart({ tasks, projects }: GanttChartProps) {
               onProgressChange={handleProgressChange}
               onDoubleClick={handleDblClick}
               onSelect={handleSelect}
-              listCellWidth={isChecked ? "155px" : ""}
+              listCellWidth={isChecked ? "200px" : ""}
               columnWidth={
                 viewMode === ViewMode.Month
-                  ? 65
+                  ? 80
                   : viewMode === ViewMode.Week
-                  ? 250
-                  : 60
+                  ? 300
+                  : viewMode === ViewMode.Day
+                  ? 80
+                  : 120
               }
               ganttHeight={600}
-              barBackgroundColor="#f3f4f6"
-              barBackgroundSelectedColor="#e5e7eb"
-              arrowColor="#6b7280"
-              fontFamily="Inter, sans-serif"
-              fontSize="12px"
+              barBackgroundColor="#f8fafc"
+              barBackgroundSelectedColor="#e2e8f0"
+              arrowColor="#64748b"
+              arrowIndent={20}
+              fontFamily="Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+              fontSize="13px"
             />
           </div>
         ) : (
           <div className="flex items-center justify-center h-64 text-muted-foreground">
             <div className="text-center">
+              <Route className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No valid data available</p>
               <p className="text-sm">
                 Create projects and tasks with proper titles and dates to see
