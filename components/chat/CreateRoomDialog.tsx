@@ -44,6 +44,7 @@ export function CreateRoomDialog({
     type: RoomType.PRIVATE,
     isEncrypted: true,
   });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [createRoom, { isLoading }] = useCreateRoomMutation();
 
@@ -51,6 +52,7 @@ export function CreateRoomDialog({
     e.preventDefault();
 
     try {
+      setErrorMessage(null);
       await createRoom({
         ...formData,
         workspaceId,
@@ -66,6 +68,16 @@ export function CreateRoomDialog({
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to create room:", error);
+      if (typeof error === "object" && error !== null && "data" in error) {
+        const apiError = error as { data?: { message?: string } };
+        setErrorMessage(
+          apiError.data?.message || "Failed to create room. Please choose another name."
+        );
+      } else if (error instanceof Error) {
+        setErrorMessage(error.message);
+      } else {
+        setErrorMessage("Failed to create room. Please choose another name.");
+      }
     }
   };
 
@@ -88,6 +100,9 @@ export function CreateRoomDialog({
               placeholder="Enter room name"
               required
             />
+            {errorMessage && (
+              <p className="text-sm text-destructive">{errorMessage}</p>
+            )}
           </div>
 
           <div className="space-y-2">

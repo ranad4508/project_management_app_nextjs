@@ -49,6 +49,8 @@ export class ChatService {
       inviteUsers = [],
     } = data;
 
+    const normalizedRoomName = name.trim();
+
     // Verify workspace access
     const workspace = await Workspace.findById(workspaceId);
     if (!workspace) {
@@ -73,6 +75,18 @@ export class ChatService {
       }
     }
 
+    // Prevent duplicate room names within the same workspace
+    const existingRoomWithName = await ChatRoom.findOne({
+      workspace: workspaceId,
+      name: normalizedRoomName,
+    }).collation({ locale: "en", strength: 2 });
+
+    if (existingRoomWithName) {
+      throw new ConflictError(
+        "A room with this name already exists in this workspace"
+      );
+    }
+
     // Generate encryption key for the room
     const encryptionKeyId = isEncrypted
       ? EncryptionService.generateKeyId()
@@ -80,7 +94,7 @@ export class ChatService {
 
     // Create room
     const room = new ChatRoom({
-      name,
+      name: normalizedRoomName,
       description,
       type,
       workspace: workspaceId,
@@ -127,7 +141,16 @@ export class ChatService {
       room.members.push(...invitedMembers);
     }
 
-    await room.save();
+    try {
+      await room.save();
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        throw new ConflictError(
+          "A room with this name already exists in this workspace"
+        );
+      }
+      throw error;
+    }
     await room.populate([
       { path: "createdBy", select: "name email avatar" },
       { path: "members.user", select: "name email avatar" },

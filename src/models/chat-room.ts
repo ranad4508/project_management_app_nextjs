@@ -130,6 +130,16 @@ const ChatRoomSchema = new Schema<IChatRoom>(
 ChatRoomSchema.index({ workspace: 1, type: 1 });
 ChatRoomSchema.index({ "members.user": 1 });
 ChatRoomSchema.index({ lastActivity: -1 });
+ChatRoomSchema.index(
+  { workspace: 1, name: 1 },
+  {
+    unique: true,
+    collation: {
+      locale: "en",
+      strength: 2,
+    },
+  }
+);
 
 // Methods
 ChatRoomSchema.methods.isMember = function (userId: string): boolean {
