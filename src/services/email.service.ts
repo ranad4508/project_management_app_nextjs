@@ -2,18 +2,78 @@ import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
 export class EmailService {
-  private transporter: Transporter;
+  private transporter: Transporter | null = null;
+  private isConfigured = false;
 
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.BREVO_SMTP_HOST,
-      port: Number.parseInt(process.env.BREVO_SMTP_PORT || "587"),
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.BREVO_SMTP_USER,
-        pass: process.env.BREVO_SMTP_PASSWORD,
-      },
-    });
+    this.initializeTransporter();
+  }
+
+  private initializeTransporter() {
+    try {
+      // Check for Gmail SMTP credentials first (primary)
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_APP_PASSWORD;
+
+      // Check for Brevo credentials (fallback)
+      const brevoUser = process.env.BREVO_SENDER_EMAIL;
+      const brevoPass = process.env.BREVO_SMTP_PASSWORD;
+
+      console.log("Email credentials check:", {
+        hasGmailUser: !!gmailUser,
+        hasGmailPass: !!gmailPass,
+        hasBrevoUser: !!brevoUser,
+        hasBrevoPass: !!brevoPass,
+        userEmail: gmailUser || brevoUser,
+      });
+
+      // Try Gmail SMTP first if configured
+      if (gmailUser && gmailPass) {
+        console.log("Using Gmail SMTP configuration");
+        this.transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: {
+            user: gmailUser,
+            pass: gmailPass,
+          },
+        });
+        this.isConfigured = true;
+        console.log("Gmail SMTP service initialized successfully");
+        return;
+      }
+
+      // Fall back to Brevo if Gmail not configured
+      if (brevoUser && brevoPass) {
+        console.log("Using Brevo SMTP configuration");
+        this.transporter = nodemailer.createTransport({
+          host: "smtp-relay.brevo.com",
+          port: 587,
+          secure: false,
+          auth: {
+            user: brevoUser,
+            pass: brevoPass,
+          },
+          tls: {
+            rejectUnauthorized: false,
+          },
+        });
+        this.isConfigured = true;
+        console.log("Brevo SMTP service initialized successfully");
+        return;
+      }
+
+      // No email service configured
+      console.warn(
+        "Email credentials not configured. Email functionality will be disabled."
+      );
+      console.warn(
+        "Required: Either (GMAIL_USER and GMAIL_APP_PASSWORD) or (BREVO_SENDER_EMAIL and BREVO_SMTP_PASSWORD)"
+      );
+      this.isConfigured = false;
+    } catch (error) {
+      console.error("Failed to initialize email service:", error);
+      this.isConfigured = false;
+    }
   }
 
   /**
@@ -22,18 +82,34 @@ export class EmailService {
   public async sendEmail(
     to: string,
     subject: string,
-    html: string
+    html: string,
+    text?: string
   ): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      console.log("📧 Email would be sent to:", to);
+      console.log("📧 Subject:", subject);
+      console.log("📧 Email service not configured - skipping actual send");
+      return; // Don't throw error, just log and continue
+    }
+
     try {
-      await this.transporter.sendMail({
-        from: `"WorkSphere" <${process.env.EMAIL_FROM}>`,
+      const senderEmail = process.env.GMAIL_USER || process.env.BREVO_SENDER_EMAIL;
+      const mailOptions = {
+        from: `${
+          process.env.BREVO_SENDER_NAME || "WorkSphere"
+        } <${senderEmail}>`,
         to,
         subject,
         html,
-      });
+        text: text || html.replace(/<[^>]*>/g, ""), // Strip HTML for text version
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log("Email sent successfully:", result.messageId);
     } catch (error) {
       console.error("Email sending failed:", error);
-      throw new Error("Failed to send email");
+      console.log("📧 Continuing without sending email to:", to);
+      // Don't throw error to prevent breaking the main functionality
     }
   }
 

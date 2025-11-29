@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Calendar,
+  Calendar as CalenderIcon,
   Clock,
   User,
   Flag,
@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -92,6 +93,8 @@ import {
 } from "@/src/utils/taskStatus";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@radix-ui/react-popover";
+import { cn } from "@/lib/utils";
 
 const editTaskSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -668,6 +671,77 @@ export default function TaskDetailPage() {
                         />
                       </div>
 
+                      {/* Due Date and Estimated Hours */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="dueDate"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                              <FormLabel>Due Date</FormLabel>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full pl-3 text-left font-normal",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      {field.value ? (
+                                        format(field.value, "PPP")
+                                      ) : (
+                                        <span>Pick a date</span>
+                                      )}
+                                      <CalenderIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent 
+  className="w-auto p-0 bg-white border border-gray-200 rounded-md shadow-lg z-50" 
+  align="start"
+>
+  <Calendar
+    mode="single"
+    selected={field.value}
+    onSelect={field.onChange}
+    initialFocus
+    className="bg-white"
+  />
+</PopoverContent>
+                              </Popover>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="estimatedHours"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Estimated Hours</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.5}
+                                  placeholder="0"
+                                  {...field}
+                                  onChange={(e) =>
+                                    field.onChange(
+                                      e.target.value ? Number(e.target.value) : undefined
+                                    )
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
                       {/* Assignee */}
                       <FormField
                         control={form.control}
@@ -994,7 +1068,7 @@ export default function TaskDetailPage() {
                 {/* Due Date */}
                 <div>
                   <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
+                    <CalenderIcon className="w-4 h-4" />
                     Due Date
                   </Label>
                   <div className="mt-2">
